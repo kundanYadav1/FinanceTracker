@@ -1,98 +1,132 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
+import { Button } from '@/components/ui/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
+import { formatMoney } from '@/utils/money';
+import { useAppStore } from '@/store/appStore';
+import type { Transaction } from '@/db/transactions';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+export default function DashboardScreen() {
+  const router = useRouter();
+  const { transactions, getTotals } = useAppStore();
+
+  const income = getTotals('income');
+  const expenses = getTotals('expense');
+  const savings = { currency: 'INR', cents: income.cents - expenses.cents };
+  const recent = transactions.slice(0, 5);
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+    <ThemedView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ThemedText type="title" style={styles.title}>
+          Dashboard
+        </ThemedText>
+        <ThemedText type="small" style={styles.subtitle}>
+          Your financial snapshot
+        </ThemedText>
+
+        <View style={styles.cardRow}>
+          <StatCard label="Income" value={formatMoney(income)} positive />
+          <StatCard label="Expenses" value={formatMoney(expenses)} positive={false} />
+          <StatCard label="Savings" value={formatMoney(savings)} positive />
+        </View>
+
+        <View style={styles.section}>
+          <ThemedText type="smallBold" style={styles.sectionTitle}>
+            Quick actions
+          </ThemedText>
+          <View style={styles.actionRow}>
+            <Button onPress={() => router.push('/transactions')} label="Add Expense" type="expense" />
+            <Button onPress={() => router.push('/transactions')} label="Add Income" type="income" />
+            <Button onPress={() => router.push('/goals')} label="Savings Goals" type="default" />
+            <Button onPress={() => router.push('/budgets')} label="Budgets" type="default" />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <ThemedText type="smallBold" style={styles.sectionTitle}>
+            Recent transactions
+          </ThemedText>
+          {recent.length === 0 ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
+              No transactions yet. Add your first expense or income.
+            </ThemedText>
+          ) : (
+            <View style={styles.list}>
+              {recent.map((t) => (
+                <TransactionRow key={t.id} transaction={t} />
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </ThemedView>
   );
 }
 
-export default function HomeScreen() {
+function StatCard({ label, value, positive }: { label: string; value: string; positive: boolean }) {
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <ThemedView
+      type="backgroundElement"
+      style={[styles.statCard, { borderLeftColor: positive ? '#4db6ac' : '#e57373' }]}>
+      <ThemedText type="small" themeColor="textSecondary">
+        {label}
+      </ThemedText>
+      <ThemedText type="title" style={styles.statValue}>
+        {value}
+      </ThemedText>
+    </ThemedView>
+  );
+}
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
+function TransactionRow({ transaction }: { transaction: Transaction }) {
+  const isIncome = transaction.type === 'income';
+  return (
+    <ThemedView
+      type="backgroundElement"
+      style={[styles.row, { borderLeftColor: isIncome ? '#4db6ac' : '#e57373' }]}
+    >
+      <ThemedText type="default">
+        {transaction.type === 'income' ? 'Income' : 'Expense'} · {transaction.date}
+      </ThemedText>
+      <ThemedText
+        type="default"
+        style={{ color: isIncome ? '#4db6ac' : '#e57373', fontWeight: '600' }}
+      >
+        {formatMoney(transaction.amount)}
+      </ThemedText>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1 },
+  scrollContent: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.six },
+  title: { fontSize: 32, fontWeight: 600, lineHeight: 44 },
+  subtitle: { fontSize: 14, lineHeight: 20, marginBottom: Spacing.four },
+  cardRow: { flexDirection: 'row', gap: Spacing.three, marginBottom: Spacing.four },
+  statCard: {
     flex: 1,
-    justifyContent: 'center',
+    padding: Spacing.four,
+    borderRadius: Spacing.three,
+    borderLeftWidth: 4,
+    minWidth: 120,
+  },
+  statValue: { fontSize: 20, fontWeight: 600, marginTop: Spacing.half },
+  section: { marginBottom: Spacing.four },
+  sectionTitle: { fontSize: 14, fontWeight: 700, marginBottom: Spacing.three },
+  actionRow: { flexDirection: 'row', gap: Spacing.three, flexWrap: 'wrap' },
+  empty: { paddingVertical: Spacing.four, textAlign: 'center' },
+  list: { gap: Spacing.two },
+  row: {
     flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+    borderRadius: Spacing.two,
+    borderLeftWidth: 4,
   },
 });
