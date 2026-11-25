@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { Icon } from '@/components/kosh/icons';
+import { KoshLogo } from '@/components/kosh/logo';
 import {
   Amount,
   Button,
@@ -64,11 +65,14 @@ export default function DashboardScreen() {
     <>
       <Screen>
         <View style={styles.top}>
-          <View style={{ flexShrink: 1 }}>
-            <KText variant="title" accessibilityRole="header">
-              {greeting(now.getHours())}
-            </KText>
-            <KText variant="caption">{monthLabel(now)}</KText>
+          <View style={styles.brand}>
+            <KoshLogo size={44} />
+            <View style={{ flexShrink: 1 }}>
+              <KText variant="title" accessibilityRole="header">
+                {greeting(now.getHours())}
+              </KText>
+              <KText variant="caption">{monthLabel(now)}</KText>
+            </View>
           </View>
           <IconButton
             label={hideAmounts ? 'Show amounts' : 'Hide amounts'}
@@ -209,6 +213,7 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Space.s3 },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: Space.s3, flexShrink: 1 },
   pair: { flexDirection: 'row', gap: Space.s3 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.s3 },
   half: { flexBasis: '47%', flexGrow: 1, minWidth: 0 },

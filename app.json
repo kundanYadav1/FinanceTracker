@@ -4,34 +4,34 @@
     "slug": "FinanceTracker",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/kosh/kosh-icon-1024.png",
     "scheme": "financetracker",
     "userInterfaceStyle": "automatic",
-    "ios": {
-      "icon": "./assets/expo.icon"
-    },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#0E5A52",
+        "foregroundImage": "./assets/images/kosh/kosh-adaptive-foreground-1024.png",
+        "monochromeImage": "./assets/images/kosh/kosh-monochrome-1024.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.kundan2001.FinanceTracker"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/kosh/kosh-favicon-48.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#F6F3EC",
+          "image": "./assets/images/kosh/kosh-icon-1024.png",
+          "imageWidth": 120,
+          "dark": {
+            "backgroundColor": "#121815",
+            "image": "./assets/images/kosh/kosh-icon-1024.png"
+          }
         }
       ],
       "expo-sqlite",
