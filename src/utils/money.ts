@@ -102,3 +102,27 @@ export function savingsRate(income: Money, expenses: Money): Money | null {
   const rate = divide(multiply(savings, 100), income.cents);
   return { currency: income.currency, cents: rate.cents };
 }
+
+/** Group integer digits Nepali-style: 1,00,000 (last three, then pairs). */
+export function groupNepaliDigits(units: number): string {
+  const digits = String(Math.abs(Math.trunc(units)));
+  if (digits.length <= 3) return digits;
+  const head = digits.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+  return `${head},${digits.slice(-3)}`;
+}
+
+/**
+ * Display form used by the UI: `Rs 1,00,000`, paisa shown only when non-zero.
+ * Always unsigned (use `sign` to prefix `+` or `−`); negative values keep a `−`.
+ */
+export function formatRupees(money: Money, sign?: '+' | '−'): string {
+  const abs = Math.abs(Math.round(money.cents));
+  const units = Math.floor(abs / 100);
+  const paisa = abs % 100;
+  const body = groupNepaliDigits(units) + (paisa ? `.${String(paisa).padStart(2, '0')}` : '');
+  const prefix = sign ?? (money.cents < 0 ? '−' : '');
+  return `${prefix}Rs ${body}`;
+}
+
+/** Masked form for the hide-amounts state. */
+export const MASKED_AMOUNT = 'Rs ••••';

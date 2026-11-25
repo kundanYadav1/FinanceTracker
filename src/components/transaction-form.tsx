@@ -1,226 +1,236 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Button, Chip, IconButton, KText, Segmented } from '@/components/kosh/kosh';
+import { Icon } from '@/components/kosh/icons';
+import { FontFamily, Radius, Space, TapMin } from '@/constants/theme';
+import type { Category, PaymentMethod } from '@/db/seed';
+import { DEFAULT_CURRENCY, toDateKey } from '@/domain/overview';
+import { useTheme } from '@/hooks/use-theme';
 import type { Money } from '@/utils/money';
 import { toCents } from '@/utils/money';
-import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
-import type { Category, PaymentMethod } from '@/db/seed';
 
-export type TransactionFormProps = {
-  categories: Category[];
-  paymentMethods: PaymentMethod[];
-  transaction?: {
-    id: string;
-    type: 'income' | 'expense';
-    amount: Money;
-    categoryId: string;
-    paymentMethodId?: string;
-    date: string;
-    note?: string;
-    isRecurring: boolean;
-  };
-  onSave: (input: {
-    type: 'income' | 'expense';
-    amount: Money;
-    categoryId: string;
-    paymentMethodId?: string;
-    date: string;
-    note?: string;
-    isRecurring: boolean;
-  }) => void | Promise<void>;
-  onCancel: () => void;
+export type TransactionDraft = {
+  type: 'income' | 'expense';
+  amount: Money;
+  categoryId: string;
+  paymentMethodId?: string;
+  date: string;
+  note?: string;
+  isRecurring: boolean;
 };
 
-export function TransactionForm({ categories, paymentMethods, transaction, onSave, onCancel }: TransactionFormProps) {
+export type TransactionSheetProps = {
+  visible: boolean;
+  categories: Category[];
+  paymentMethods: PaymentMethod[];
+  /** Existing transaction to edit; omit to add. */
+  transaction?: (TransactionDraft & { id: string }) | null;
+  initialType?: 'income' | 'expense';
+  onSave: (input: TransactionDraft) => void | Promise<void>;
+  onClose: () => void;
+};
+
+/** Bottom sheet for adding or editing a transaction. */
+export function TransactionSheet(props: TransactionSheetProps) {
   const theme = useTheme();
-  const [type, setType] = useState<'income' | 'expense'>(transaction?.type ?? 'expense');
-  const [amount, setAmount] = useState(transaction ? (transaction.amount.cents / 100).toFixed(2) : '');
-  const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? categories[0]?.id ?? '');
+  return (
+    <Modal visible={props.visible} transparent animationType="slide" onRequestClose={props.onClose}>
+      <View style={[styles.scrim, { backgroundColor: theme.scrim }]}>
+        <Pressable accessibilityLabel="Close" style={{ flex: 1 }} onPress={props.onClose} />
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <SafeAreaView edges={['bottom']} style={[styles.sheet, { backgroundColor: theme.surface200 }]}>
+            {props.visible ? <TransactionForm {...props} /> : null}
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
+function TransactionForm({
+  categories,
+  paymentMethods,
+  transaction,
+  initialType = 'expense',
+  onSave,
+  onClose,
+}: TransactionSheetProps) {
+  const theme = useTheme();
+  const [type, setType] = useState<'income' | 'expense'>(transaction?.type ?? initialType);
+  const [amount, setAmount] = useState(transaction ? String(transaction.amount.cents / 100) : '');
+  const [pickedCategoryId, setCategoryId] = useState(transaction?.categoryId ?? '');
   const [paymentMethodId, setPaymentMethodId] = useState(transaction?.paymentMethodId ?? '');
-  const [date, setDate] = useState(transaction?.date ?? new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(transaction?.date.slice(0, 10) ?? toDateKey(new Date()));
   const [note, setNote] = useState(transaction?.note ?? '');
   const [isRecurring, setIsRecurring] = useState(transaction?.isRecurring ?? false);
+  const [error, setError] = useState<string | null>(null);
+
+  const visibleCategories = categories.filter((c) => c.type === type);
+
+  // Falls back to the first category of the chosen type when the picked one belongs to the other type.
+  const categoryId = visibleCategories.some((c) => c.id === pickedCategoryId)
+    ? pickedCategoryId
+    : (visibleCategories[0]?.id ?? '');
 
   const handleSave = async () => {
-    const cents = toCents(amount);
+    let cents: number;
+    try {
+      cents = toCents(amount.replace(/,/g, ''));
+    } catch {
+      setError('Enter an amount with up to two decimals, for example 450 or 450.50.');
+      return;
+    }
+    if (cents <= 0) {
+      setError('Amount must be more than zero.');
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      setError('Enter the date as YYYY-MM-DD.');
+      return;
+    }
+    if (!categoryId) {
+      setError('Pick a category.');
+      return;
+    }
+    setError(null);
     await onSave({
       type,
-      amount: { currency: 'INR', cents },
+      amount: { currency: transaction?.amount.currency ?? DEFAULT_CURRENCY, cents },
       categoryId,
       paymentMethodId: paymentMethodId || undefined,
       date,
-      note: note || undefined,
+      note: note.trim() || undefined,
       isRecurring,
     });
   };
 
-  const inputStyle = {
-    backgroundColor: theme.background,
-    color: theme.text,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.three,
-    borderWidth: 1,
-    borderColor: theme.backgroundElement,
-    minHeight: 44,
-  } as const;
+  const inputStyle = [
+    styles.input,
+    { backgroundColor: theme.surface200, borderColor: theme.lineStrong, color: theme.ink },
+  ];
 
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <ThemedText type="smallBold" style={styles.sectionTitle}>
-        {transaction ? 'Edit Transaction' : 'Add Transaction'}
-      </ThemedText>
-
-      <ThemedText type="small">Type</ThemedText>
-      <View style={styles.toggleRow}>
-        <TypeChip value="income" selected={type === 'income'} onPress={() => setType('income')} theme={theme} />
-        <TypeChip value="expense" selected={type === 'expense'} onPress={() => setType('expense')} theme={theme} />
+    <ScrollView
+      contentContainerStyle={{ gap: Space.s5, padding: Space.s4, paddingTop: Space.s3 }}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}>
+      <View style={[styles.handle, { backgroundColor: theme.lineStrong }]} />
+      <View style={styles.titleRow}>
+        <KText variant="title" accessibilityRole="header">
+          {transaction ? 'Edit transaction' : 'Add transaction'}
+        </KText>
+        <IconButton label="Close" onPress={onClose} bare>
+          <Icon name="close" color={theme.ink} />
+        </IconButton>
       </View>
 
-      <ThemedText type="small" style={styles.label}>Amount</ThemedText>
-      <TextInput style={inputStyle} value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0.00" />
+      <Segmented
+        value={type}
+        onChange={setType}
+        options={[
+          { value: 'expense', label: 'Expense' },
+          { value: 'income', label: 'Income' },
+        ]}
+      />
 
-      <ThemedText type="small" style={styles.label}>Category</ThemedText>
-      <View style={styles.chipGrid}>
-        {categories.map((cat) => {
-          const selected = cat.id === categoryId;
-          return (
-            <TouchableOpacity
-              key={cat.id}
-              style={[styles.chip, selected && styles.chipSelected]}
-              onPress={() => setCategoryId(cat.id)}
-            >
-              <ThemedText
-                type="small"
-                style={[
-                  styles.chipText,
-                  selected ? { color: '#fff' } : { color: theme.textSecondary },
-                ]}
-              >
-                {cat.name}
-              </ThemedText>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={{ gap: Space.s1 }}>
+        <KText variant="overline">Amount</KText>
+        <View style={[styles.amountRow, { borderBottomColor: theme.lineStrong }]}>
+          <KText variant="displayLg" color="inkMuted">
+            Rs
+          </KText>
+          <TextInput
+            accessibilityLabel="Amount"
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="decimal-pad"
+            placeholder="0"
+            placeholderTextColor={theme.inkMuted}
+            style={[styles.amountInput, { color: theme.ink }]}
+          />
+        </View>
       </View>
 
-      <ThemedText type="small" style={styles.label}>Payment Method</ThemedText>
-      <View style={styles.chipGrid}>
-        {paymentMethods.map((pm) => {
-          const selected = paymentMethodId === pm.id;
-          return (
-            <TouchableOpacity
-              key={pm.id}
-              style={[styles.chip, selected && styles.chipSelected]}
-              onPress={() => setPaymentMethodId(pm.id)}
-            >
-              <ThemedText
-                type="small"
-                style={[
-                  styles.chipText,
-                  selected ? { color: '#fff' } : { color: theme.textSecondary },
-                ]}
-              >
-                {pm.name}
-              </ThemedText>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={{ gap: Space.s2 }}>
+        <KText variant="overline">Category</KText>
+        <View style={styles.chips}>
+          {visibleCategories.map((c) => (
+            <Chip key={c.id} label={c.name} selected={c.id === categoryId} onPress={() => setCategoryId(c.id)} />
+          ))}
+        </View>
       </View>
 
-      <ThemedText type="small" style={styles.label}>Date</ThemedText>
-      <TextInput style={inputStyle} value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" />
-
-      <ThemedText type="small" style={styles.label}>Note (optional)</ThemedText>
-      <TextInput style={inputStyle} value={note} onChangeText={setNote} placeholder="e.g. Groceries" />
-
-      <View style={styles.recurringRow}>
-        <TouchableOpacity style={styles.recurringWrap} onPress={() => setIsRecurring(!isRecurring)}>
-          <ThemedText type="small" style={styles.recurringText}>
-            {isRecurring ? '✓' : '○'} Recurring
-          </ThemedText>
-        </TouchableOpacity>
+      <View style={{ gap: Space.s1 }}>
+        <KText variant="overline">Date</KText>
+        <TextInput
+          accessibilityLabel="Date"
+          value={date}
+          onChangeText={setDate}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={theme.inkMuted}
+          style={inputStyle}
+        />
       </View>
 
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={[styles.cancelButton, { borderColor: theme.backgroundElement }]} onPress={onCancel}>
-          <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>Cancel</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <ThemedText type="smallBold" style={{ color: '#fff' }}>{transaction ? 'Save' : 'Add'}</ThemedText>
-        </TouchableOpacity>
+      <View style={{ gap: Space.s2 }}>
+        <KText variant="overline">Payment method</KText>
+        <View style={styles.chips}>
+          {paymentMethods.map((p) => (
+            <Chip
+              key={p.id}
+              label={p.name}
+              selected={p.id === paymentMethodId}
+              onPress={() => setPaymentMethodId(p.id === paymentMethodId ? '' : p.id)}
+            />
+          ))}
+        </View>
       </View>
+
+      <View style={{ gap: Space.s1 }}>
+        <KText variant="overline">Note</KText>
+        <TextInput
+          accessibilityLabel="Note"
+          value={note}
+          onChangeText={setNote}
+          placeholder="Groceries for the week"
+          placeholderTextColor={theme.inkMuted}
+          style={inputStyle}
+        />
+      </View>
+
+      <View style={styles.chips}>
+        <Chip label="Recurring" selected={isRecurring} onPress={() => setIsRecurring(!isRecurring)} />
+      </View>
+
+      {error ? (
+        <KText variant="bodyStrong" color="negative" accessibilityLiveRegion="polite">
+          {error}
+        </KText>
+      ) : null}
+
+      <Button block onPress={handleSave}>
+        {transaction ? 'Save changes' : type === 'income' ? 'Save income' : 'Save expense'}
+      </Button>
     </ScrollView>
   );
 }
 
-function TypeChip({ value, selected, onPress, theme }: { value: 'income' | 'expense'; selected: boolean; onPress: () => void; theme: ReturnType<typeof useTheme> }) {
-  return (
-    <TouchableOpacity
-      style={[styles.typeChip, selected && styles.typeChipSelected]}
-      onPress={onPress}>
-      <ThemedText
-        type="smallBold"
-        style={[
-          styles.typeChipText,
-          selected ? { color: '#fff' } : { color: theme.textSecondary },
-        ]}>
-        {value === 'income' ? 'Income' : 'Expense'}
-      </ThemedText>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.six, gap: Spacing.four },
-  sectionTitle: { fontSize: 14, fontWeight: 700, marginBottom: Spacing.two },
-  label: { fontSize: 12, fontWeight: 600, marginBottom: Spacing.half },
-  toggleRow: { flexDirection: 'row', gap: Spacing.three, marginBottom: Spacing.two },
-  typeChip: {
-    flex: 1,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.three,
-    borderWidth: 1,
-    borderColor: '#E0E1E6',
-    alignItems: 'center',
+  scrim: { flex: 1, justifyContent: 'flex-end' },
+  sheet: { maxHeight: '92%', borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg },
+  handle: { width: 40, height: 4, borderRadius: Radius.full, alignSelf: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.s2 },
+  input: {
+    minHeight: TapMin,
+    borderWidth: 2,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Space.s3,
+    fontFamily: FontFamily.sans500,
+    fontSize: 15,
   },
-  typeChipSelected: {
-    backgroundColor: '#3c87f7',
-    borderColor: '#3c87f7',
-  },
-  typeChipText: { fontSize: 13, fontWeight: 600 },
-  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginBottom: Spacing.two },
-  chip: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.three,
-    borderWidth: 1,
-    borderColor: '#E0E1E6',
-    alignItems: 'center',
-  },
-  chipSelected: {
-    backgroundColor: '#3c87f7',
-    borderColor: '#3c87f7',
-  },
-  chipText: { fontSize: 12, fontWeight: 600 },
-  recurringRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  recurringWrap: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  recurringText: { fontSize: 13 },
-  buttonRow: { flexDirection: 'row', gap: Spacing.three, marginTop: Spacing.two },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: Spacing.two,
-    alignItems: 'center',
-    borderRadius: Spacing.three,
-    borderWidth: 1,
-  },
-  saveButton: {
-    flex: 1,
-    paddingVertical: Spacing.two,
-    alignItems: 'center',
-    borderRadius: Spacing.three,
-    backgroundColor: '#3c87f7',
-  },
+  amountRow: { flexDirection: 'row', alignItems: 'center', gap: Space.s2, borderBottomWidth: 2 },
+  amountInput: { flex: 1, minHeight: TapMin, fontFamily: FontFamily.display, fontSize: 32, paddingVertical: 0 },
 });

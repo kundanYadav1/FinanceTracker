@@ -30,6 +30,9 @@ type AppState = {
   budgets: Budget[];
   goals: SavingsGoal[];
   isLoaded: boolean;
+  /** Session-only privacy mask for amounts. */
+  hideAmounts: boolean;
+  toggleHideAmounts: () => void;
 
   load: () => Promise<void>;
   reloadTransactions: (filters?: TransactionFilters) => Promise<void>;
@@ -63,6 +66,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   budgets: [],
   goals: [],
   isLoaded: false,
+  hideAmounts: false,
+  toggleHideAmounts: () => set((state) => ({ hideAmounts: !state.hideAmounts })),
 
   load: async () => {
     await SeedDB.seedDefaultData();

@@ -5,7 +5,7 @@ exports[`ThemedText renders correctly 1`] = `
   style={
     [
       {
-        "color": "#000000",
+        "color": "#1B2420",
       },
       {
         "fontSize": 16,
