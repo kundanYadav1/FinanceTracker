@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const MIGRATIONS = [
   {
@@ -147,6 +147,24 @@ export const MIGRATIONS = [
 
       INSERT OR IGNORE INTO notification_settings (id) VALUES ('default');
       INSERT OR IGNORE INTO schema_migrations (version) VALUES (4);
+    `,
+  },
+  {
+    version: 5,
+    up: `
+      -- Security & privacy preferences (single row). The PIN itself lives in secure storage, never here (ADR-0014).
+      CREATE TABLE IF NOT EXISTS app_settings (
+        id TEXT PRIMARY KEY CHECK (id = 'default'),
+        lock_enabled INTEGER NOT NULL DEFAULT 0 CHECK (lock_enabled IN (0, 1)),
+        biometric_enabled INTEGER NOT NULL DEFAULT 0 CHECK (biometric_enabled IN (0, 1)),
+        lock_timeout_sec INTEGER NOT NULL DEFAULT 0 CHECK (lock_timeout_sec IN (0, 60, 300)),
+        privacy_cover_enabled INTEGER NOT NULL DEFAULT 1 CHECK (privacy_cover_enabled IN (0, 1)),
+        hide_amounts_on_launch INTEGER NOT NULL DEFAULT 0 CHECK (hide_amounts_on_launch IN (0, 1)),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      INSERT OR IGNORE INTO app_settings (id) VALUES ('default');
+      INSERT OR IGNORE INTO schema_migrations (version) VALUES (5);
     `,
   },
 ];

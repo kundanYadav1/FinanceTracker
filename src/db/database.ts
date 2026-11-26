@@ -1,40 +1,48 @@
-import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
+import { backupDatabaseAsync, deleteDatabaseAsync, openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
+
+import { runMigrations } from './migrate';
 
 const DATABASE_NAME = 'financetracker.db';
 
 let dbInstance: SQLiteDatabase | null = null;
+let opening: Promise<SQLiteDatabase> | null = null;
+
+export function preUpgradeDatabaseName(fromVersion: number): string {
+  return `financetracker.pre-v${fromVersion}.db`;
+}
+
+/** Copies the live database to `destName` using SQLite's online backup API. */
+export async function copyDatabaseTo(source: SQLiteDatabase, destName: string): Promise<void> {
+  const dest = await openDatabaseAsync(destName);
+  try {
+    await backupDatabaseAsync({ sourceDatabase: source, destDatabase: dest });
+  } finally {
+    await dest.closeAsync();
+  }
+}
 
 export async function getDatabase(): Promise<SQLiteDatabase> {
   if (dbInstance) return dbInstance;
-  const db = await openDatabaseAsync(DATABASE_NAME);
-  await runMigrations(db);
-  dbInstance = db;
-  return db;
+  // Share one in-flight open so concurrent callers do not migrate twice.
+  opening ??= (async () => {
+    const db = await openDatabaseAsync(DATABASE_NAME);
+    await runMigrations(db, {
+      // ADR-0009: keep a recovery copy while an existing database is upgraded; drop it once the upgrade succeeded.
+      beforeUpgrade: (from) => copyDatabaseTo(db, preUpgradeDatabaseName(from)),
+      afterUpgrade: (from) => deleteDatabaseAsync(preUpgradeDatabaseName(from)).catch(() => undefined),
+    });
+    dbInstance = db;
+    return db;
+  })().finally(() => {
+    opening = null;
+  });
+  return opening;
 }
 
 export async function closeDatabase(): Promise<void> {
   if (dbInstance) {
     await dbInstance.closeAsync();
     dbInstance = null;
-  }
-}
-
-async function runMigrations(db: SQLiteDatabase): Promise<void> {
-  const { SCHEMA_VERSION, migrationSql } = await import('./schema');
-
-  await db.execAsync('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)');
-
-  const current = await db.getFirstAsync<{ version: number }>(
-    'SELECT MAX(version) AS version FROM schema_migrations'
-  );
-  const appliedVersion = current?.version ?? 0;
-
-  for (let version = appliedVersion + 1; version <= SCHEMA_VERSION; version += 1) {
-    const sql = migrationSql(version);
-    if (!sql) continue;
-    await db.withTransactionAsync(async () => {
-      await db.execAsync(sql);
-    });
   }
 }
 

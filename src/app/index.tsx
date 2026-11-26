@@ -85,7 +85,7 @@ export default function DashboardScreen() {
             </View>
           </View>
           <View style={styles.actions}>
-            <IconButton label="Notification settings" onPress={() => router.push('/settings')}>
+            <IconButton label="Settings" onPress={() => router.push('/settings' as '/')}>
               <Icon name="bell" color={theme.ink} />
             </IconButton>
             <IconButton

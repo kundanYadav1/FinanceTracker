@@ -3,6 +3,12 @@
 **Phase:** 2 — DESIGN · **Status:** Provisional ([OD-01](open-decisions.md#od-01)) · **PRS:** §4.2, §35, NFR-004, FR-022, FR-025, FR-026.2, FR-027.3
 Related: [database-design](database-design.md) · [dependency-design](dependency-design.md) · ADRs [0011](../decisions/ADR-0011-os-backup-exclusion.md), [0012](../decisions/ADR-0012-no-database-encryption-mvp.md)
 
+> **Phase 8 update (2026-11-26)** — [spec](../specs/security-data-portability.md), ADRs [0014](../decisions/ADR-0014-app-pin-storage-lockout.md), [0015](../decisions/ADR-0015-backup-format-replace-restore.md). Supersedes this document where they differ:
+> - **T3/T7 now mitigated:** optional app PIN (4–6 digits, salted+iterated hash in `expo-secure-store`, escalating lockout) with optional biometric shortcut, auto-lock timeout, and a privacy cover in the task switcher. §5's "no app-specific PIN" decision is reversed. The lock is a privacy barrier, **not** encryption; the database is still unencrypted (ADR-0012).
+> - **T9 / §6:** CSV export (transactions) and JSON restore (replace-all, validated, single transaction, safety copy) are implemented. Backups exclude PIN and lock data.
+> - **Migrations:** run through `src/db/migrate.ts`; covered by real-SQLite tests for every historical version, an immutability hash test, rollback and newer-database tests.
+> - Still not done: SQLCipher, merge restore, encrypted backups, OS backup exclusion (`allowBackup`, OD-15).
+
 > **The local SQLite database is NOT encrypted by the application in the MVP.** No screen, store listing or document may claim otherwise (§35).
 
 ---
