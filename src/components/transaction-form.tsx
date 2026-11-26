@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, TextInput, View } from 'react-native';
 
-import { Button, Chip, IconButton, KText, Segmented } from '@/components/kosh/kosh';
-import { Icon } from '@/components/kosh/icons';
+import { BottomSheet, Button, Chip, KText, Segmented } from '@/components/kosh/kosh';
 import { FontFamily, Radius, Space, TapMin } from '@/constants/theme';
 import type { Category, PaymentMethod } from '@/db/seed';
 import { DEFAULT_CURRENCY, toDateKey } from '@/domain/overview';
@@ -34,18 +32,13 @@ export type TransactionSheetProps = {
 
 /** Bottom sheet for adding or editing a transaction. */
 export function TransactionSheet(props: TransactionSheetProps) {
-  const theme = useTheme();
   return (
-    <Modal visible={props.visible} transparent animationType="slide" onRequestClose={props.onClose}>
-      <View style={[styles.scrim, { backgroundColor: theme.scrim }]}>
-        <Pressable accessibilityLabel="Close" style={{ flex: 1 }} onPress={props.onClose} />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <SafeAreaView edges={['bottom']} style={[styles.sheet, { backgroundColor: theme.surface200 }]}>
-            {props.visible ? <TransactionForm {...props} /> : null}
-          </SafeAreaView>
-        </KeyboardAvoidingView>
-      </View>
-    </Modal>
+    <BottomSheet
+      visible={props.visible}
+      title={props.transaction ? 'Edit transaction' : 'Add transaction'}
+      onClose={props.onClose}>
+      {props.visible ? <TransactionForm {...props} /> : null}
+    </BottomSheet>
   );
 }
 
@@ -55,7 +48,6 @@ function TransactionForm({
   transaction,
   initialType = 'expense',
   onSave,
-  onClose,
 }: TransactionSheetProps) {
   const theme = useTheme();
   const [type, setType] = useState<'income' | 'expense'>(transaction?.type ?? initialType);
@@ -112,20 +104,7 @@ function TransactionForm({
   ];
 
   return (
-    <ScrollView
-      contentContainerStyle={{ gap: Space.s5, padding: Space.s4, paddingTop: Space.s3 }}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}>
-      <View style={[styles.handle, { backgroundColor: theme.lineStrong }]} />
-      <View style={styles.titleRow}>
-        <KText variant="title" accessibilityRole="header">
-          {transaction ? 'Edit transaction' : 'Add transaction'}
-        </KText>
-        <IconButton label="Close" onPress={onClose} bare>
-          <Icon name="close" color={theme.ink} />
-        </IconButton>
-      </View>
-
+    <>
       <Segmented
         value={type}
         onChange={setType}
@@ -213,15 +192,11 @@ function TransactionForm({
       <Button block onPress={handleSave}>
         {transaction ? 'Save changes' : type === 'income' ? 'Save income' : 'Save expense'}
       </Button>
-    </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { maxHeight: '92%', borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg },
-  handle: { width: 40, height: 4, borderRadius: Radius.full, alignSelf: 'center' },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.s2 },
   input: {
     minHeight: TapMin,

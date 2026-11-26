@@ -36,6 +36,8 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Label>Goals</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="target" md="track_changes" />
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="settings" hidden />
     </NativeTabs>
   );
 }

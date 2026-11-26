@@ -34,8 +34,16 @@
           }
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/kosh/kosh-monochrome-1024.png",
+          "color": "#0E5A52"
+        }
+      ],
       "expo-sqlite",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-background-task"
     ],
     "experiments": {
       "typedRoutes": true,

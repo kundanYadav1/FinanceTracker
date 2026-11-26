@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const MIGRATIONS = [
   {
@@ -121,6 +121,32 @@ export const MIGRATIONS = [
       ORDER BY updated_at DESC;
 
       INSERT OR IGNORE INTO schema_migrations (version) VALUES (3);
+    `,
+  },
+  {
+    version: 4,
+    up: `
+      -- Notification preferences (single row) and a log used to dedupe data-driven notices (ADR-0013).
+      CREATE TABLE IF NOT EXISTS notification_settings (
+        id TEXT PRIMARY KEY CHECK (id = 'default'),
+        daily_enabled INTEGER NOT NULL DEFAULT 1,
+        budget_enabled INTEGER NOT NULL DEFAULT 1,
+        goal_enabled INTEGER NOT NULL DEFAULT 1,
+        monthly_enabled INTEGER NOT NULL DEFAULT 1,
+        achievement_enabled INTEGER NOT NULL DEFAULT 1,
+        daily_time TEXT NOT NULL DEFAULT '20:00' CHECK (daily_time GLOB '[0-2][0-9]:[0-5][0-9]'),
+        permission_asked INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS notification_log (
+        dedupe_key TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        sent_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      INSERT OR IGNORE INTO notification_settings (id) VALUES ('default');
+      INSERT OR IGNORE INTO schema_migrations (version) VALUES (4);
     `,
   },
 ];
