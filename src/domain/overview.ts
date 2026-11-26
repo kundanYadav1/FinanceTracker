@@ -1,6 +1,4 @@
 import { BUDGET_WARNING_PERCENT } from '@/domain/budget';
-import type { SavingsGoal } from '@/db/goals';
-import { computeGoalProgress } from '@/db/goals';
 import type { Category } from '@/db/seed';
 import type { Transaction } from '@/db/transactions';
 import type { Money } from '@/utils/money';
@@ -122,18 +120,6 @@ export function findInsight(transactions: Transaction[], categories: Category[],
     }
   }
   return best;
-}
-
-export type GoalsSummary = { neededCents: number; savedCents: number; gapCents: number };
-
-/** Sum of required monthly savings across active goals vs this month's saving (income − expenses, floored at 0). */
-export function goalsSummary(goals: SavingsGoal[], monthlySavedCents: number): GoalsSummary {
-  const neededCents = goals.reduce((sum, g) => {
-    const p = computeGoalProgress(g);
-    return sum + (p.requiredMonthlySaving != null ? Math.round(p.requiredMonthlySaving) : 0);
-  }, 0);
-  const savedCents = Math.max(0, monthlySavedCents);
-  return { neededCents, savedCents, gapCents: Math.max(0, neededCents - savedCents) };
 }
 
 export function money(cents: number, currency = DEFAULT_CURRENCY): Money {
