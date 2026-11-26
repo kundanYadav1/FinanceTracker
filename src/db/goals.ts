@@ -21,13 +21,6 @@ export type SavingsGoalInput = {
   priority: 'low' | 'medium' | 'high';
 };
 
-export type SavingsGoalWithProgress = SavingsGoal & {
-  remainingCents: number;
-  progressPercent: number;
-  requiredMonthlySaving: number | null;
-  onTrack: boolean;
-};
-
 function mapGoalRow(row: Record<string, unknown>): SavingsGoal {
   return {
     id: String(row.id),
@@ -113,30 +106,4 @@ export async function deleteGoal(id: string): Promise<boolean> {
   const db = await getDatabase();
   const result = await db.runAsync('DELETE FROM savings_goals WHERE id = ?', [id]);
   return result.changes > 0;
-}
-
-export function computeGoalProgress(goal: SavingsGoal): SavingsGoalWithProgress {
-  const { targetAmount, currentAmount } = goal;
-  const remainingCents = Math.max(0, targetAmount.cents - currentAmount.cents);
-  const progressPercent = targetAmount.cents > 0 ? Math.round((currentAmount.cents / targetAmount.cents) * 100) : 0;
-  const completed = currentAmount.cents >= targetAmount.cents;
-
-  const targetDate = new Date(goal.targetDate);
-  const now = new Date();
-  const monthsRemaining = Math.max(0, (targetDate.getFullYear() - now.getFullYear()) * 12 + (targetDate.getMonth() - now.getMonth()));
-  const requiredMonthlySaving = monthsRemaining > 0 && !completed ? remainingCents / monthsRemaining : null;
-
-  let onTrack = false;
-  if (!completed && requiredMonthlySaving != null) {
-    onTrack = currentAmount.cents >= 0; // simplified: user is actively tracking
-  }
-
-  return {
-    ...goal,
-    remainingCents,
-    progressPercent,
-    requiredMonthlySaving,
-    onTrack,
-    status: completed ? 'completed' : goal.status,
-  };
 }

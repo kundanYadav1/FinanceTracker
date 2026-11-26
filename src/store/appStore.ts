@@ -4,13 +4,12 @@ import type { Category, PaymentMethod } from '@/db/seed';
 import * as BudgetDB from '@/db/budgets';
 import type { BudgetScope, BudgetVersion } from '@/domain/budget';
 import { DEFAULT_CURRENCY, monthKey } from '@/domain/overview';
-import type { SavingsGoal, SavingsGoalInput, SavingsGoalWithProgress } from '@/db/goals';
+import type { SavingsGoal, SavingsGoalInput } from '@/db/goals';
 import * as GoalDB from '@/db/goals';
 import type { Transaction, TransactionInput, TransactionFilters } from '@/db/transactions';
 import * as TransactionDB from '@/db/transactions';
 import * as SeedDB from '@/db/seed';
 import type { Money } from '@/utils/money';
-import { computeGoalProgress } from '@/db/goals';
 
 export type Profile = {
   id: string;
@@ -51,7 +50,6 @@ type AppState = {
     startDate?: string,
     endDate?: string
   ) => { categoryId: string; categoryName: string; amount: Money }[];
-  getGoalProgress: (goal: SavingsGoal) => SavingsGoalWithProgress;
 };
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -196,9 +194,5 @@ export const useAppStore = create<AppState>((set, get) => ({
       categoryName: value.name,
       amount: { currency: 'INR', cents: value.cents },
     }));
-  },
-
-  getGoalProgress: (goal) => {
-    return computeGoalProgress(goal);
   },
 }));
