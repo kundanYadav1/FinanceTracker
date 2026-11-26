@@ -43,7 +43,14 @@
       ],
       "expo-sqlite",
       "expo-secure-store",
-      "expo-background-task"
+      "expo-background-task",
+      "expo-sharing",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Kosh to use Face ID to unlock the app."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

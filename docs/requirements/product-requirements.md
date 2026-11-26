@@ -141,7 +141,8 @@ Settings and data export are supporting capabilities.
 |---|---|
 | MVP | FR-001, FR-002, FR-003, FR-003A, FR-004 (default categories only), FR-005, FR-006, FR-007, FR-008, FR-009, FR-010, FR-011, FR-012, FR-013, FR-014, FR-015, FR-016, FR-017, FR-018 (MVP reports per FR-018.1), FR-019, FR-022 (JSON export only), FR-024, FR-025 (MVP settings per FR-025.1), FR-026, FR-027 |
 | MVP+ | FR-004 custom categories, FR-018 trend/history reports, FR-020 recurring schedules, FR-021 notifications, FR-022 CSV export, FR-025 app lock |
-| Deferred (requires own specification) | FR-023 data restore, database encryption |
+| Deferred (requires own specification) | database encryption |
+| Pulled forward (Phase 8, see docs/specs/security-data-portability.md) | FR-022.3 CSV export, FR-023 data restore (replace-all), FR-025 app lock (PIN + biometric) |
 
 A requirement not listed as MVP shall not be implemented in the MVP.
 
