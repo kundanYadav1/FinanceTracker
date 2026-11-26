@@ -9,7 +9,18 @@ import * as GoalDB from '@/db/goals';
 import type { Transaction, TransactionInput, TransactionFilters } from '@/db/transactions';
 import * as TransactionDB from '@/db/transactions';
 import * as SeedDB from '@/db/seed';
+import * as NotificationDB from '@/db/notificationSettings';
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  type NotificationSettings,
+} from '@/domain/notifications/types';
+import { refreshNotifications } from '@/services/notifications/scheduler';
 import type { Money } from '@/utils/money';
+
+/** Re-evaluates notifications after data changes; fire-and-forget and never throws. */
+function notifyChanged(): void {
+  void refreshNotifications();
+}
 
 export type Profile = {
   id: string;
@@ -24,12 +35,14 @@ type AppState = {
   transactions: Transaction[];
   budgetVersions: BudgetVersion[];
   goals: SavingsGoal[];
+  notificationSettings: NotificationSettings;
   isLoaded: boolean;
   /** Session-only privacy mask for amounts. */
   hideAmounts: boolean;
   toggleHideAmounts: () => void;
 
   load: () => Promise<void>;
+  updateNotificationSettings: (partial: Partial<NotificationSettings>) => Promise<void>;
   reloadTransactions: (filters?: TransactionFilters) => Promise<void>;
   reloadBudgets: () => Promise<void>;
   reloadGoals: () => Promise<void>;
@@ -59,20 +72,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   transactions: [],
   budgetVersions: [],
   goals: [],
+  notificationSettings: DEFAULT_NOTIFICATION_SETTINGS,
   isLoaded: false,
   hideAmounts: false,
   toggleHideAmounts: () => set((state) => ({ hideAmounts: !state.hideAmounts })),
 
   load: async () => {
     await SeedDB.seedDefaultData();
-    const [categories, paymentMethods, transactions, budgetVersions, goals] = await Promise.all([
-      SeedDB.getCategories(),
-      SeedDB.getPaymentMethods(),
-      TransactionDB.listTransactions(),
-      BudgetDB.getBudgetVersions(),
-      GoalDB.getGoals(),
-    ]);
-    set({ categories, paymentMethods, transactions, budgetVersions, goals, isLoaded: true });
+    const [categories, paymentMethods, transactions, budgetVersions, goals, notificationSettings] =
+      await Promise.all([
+        SeedDB.getCategories(),
+        SeedDB.getPaymentMethods(),
+        TransactionDB.listTransactions(),
+        BudgetDB.getBudgetVersions(),
+        GoalDB.getGoals(),
+        NotificationDB.getNotificationSettings(),
+      ]);
+    set({ categories, paymentMethods, transactions, budgetVersions, goals, notificationSettings, isLoaded: true });
+  },
+
+  updateNotificationSettings: async (partial) => {
+    const next = { ...get().notificationSettings, ...partial };
+    await NotificationDB.saveNotificationSettings(next);
+    set({ notificationSettings: next });
+    notifyChanged();
   },
 
   reloadTransactions: async (filters) => {
@@ -108,6 +131,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   addTransaction: async (input) => {
     const transaction = await TransactionDB.createTransaction(input);
     set((state) => ({ transactions: [transaction, ...state.transactions] }));
+    notifyChanged();
     return transaction;
   },
 
@@ -117,12 +141,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       transactions: state.transactions.map((t) => (t.id === id ? transaction : t)),
     }));
+    notifyChanged();
   },
 
   removeTransaction: async (id) => {
     const ok = await TransactionDB.deleteTransaction(id);
     if (!ok) return;
     set((state) => ({ transactions: state.transactions.filter((t) => t.id !== id) }));
+    notifyChanged();
   },
 
   setBudget: async (scope, categoryId, amountCents) => {
@@ -134,6 +160,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       currency: get().profile?.currency ?? DEFAULT_CURRENCY,
     });
     await get().reloadBudgets();
+    notifyChanged();
   },
 
   removeBudget: async (scope, categoryId) => {
@@ -149,6 +176,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   addGoal: async (input) => {
     const goal = await GoalDB.createGoal(input);
     set((state) => ({ goals: [...state.goals, goal] }));
+    notifyChanged();
     return goal;
   },
 
@@ -158,6 +186,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       goals: state.goals.map((g) => (g.id === id ? goal : g)),
     }));
+    notifyChanged();
   },
 
   removeGoal: async (id) => {

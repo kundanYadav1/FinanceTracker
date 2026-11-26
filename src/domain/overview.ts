@@ -1,5 +1,4 @@
 import { BUDGET_WARNING_PERCENT } from '@/domain/budget';
-import type { Category } from '@/db/seed';
 import type { Transaction } from '@/db/transactions';
 import type { Money } from '@/utils/money';
 
@@ -77,49 +76,6 @@ export function groupByDate(transactions: Transaction[], now: Date): DateGroup[]
 /** Progress-bar state for a percent of budget used (80% warns, strictly above 100% is over). */
 export function budgetState(percent: number): 'ok' | 'warn' | 'over' {
   return percent > 100 ? 'over' : percent >= BUDGET_WARNING_PERCENT ? 'warn' : 'ok';
-}
-
-export type Insight = {
-  categoryName: string;
-  percentAbove: number;
-  thisMonthCents: number;
-  averageCents: number;
-  savingCents: number;
-};
-
-/**
- * Deterministic rule: the expense category whose spending this month is at least 15% above its
- * average over the previous three months. Returns the largest overspend, or null.
- */
-export function findInsight(transactions: Transaction[], categories: Category[], now: Date): Insight | null {
-  const current = monthKey(now);
-  const previous = [-1, -2, -3].map((o) => shiftMonth(now, o));
-  const totals = new Map<string, { now: number; prev: number }>();
-  for (const t of transactions) {
-    if (t.type !== 'expense') continue;
-    const m = t.date.slice(0, 7);
-    const entry = totals.get(t.categoryId) ?? { now: 0, prev: 0 };
-    if (m === current) entry.now += t.amount.cents;
-    else if (previous.includes(m)) entry.prev += t.amount.cents;
-    else continue;
-    totals.set(t.categoryId, entry);
-  }
-  let best: Insight | null = null;
-  for (const [categoryId, { now: n, prev }] of totals) {
-    const average = Math.round(prev / 3);
-    if (average <= 0 || n < average * 1.15) continue;
-    const saving = n - average;
-    if (!best || saving > best.savingCents) {
-      best = {
-        categoryName: categories.find((c) => c.id === categoryId)?.name ?? categoryId,
-        percentAbove: Math.round(((n - average) / average) * 100),
-        thisMonthCents: n,
-        averageCents: average,
-        savingCents: saving,
-      };
-    }
-  }
-  return best;
 }
 
 export function money(cents: number, currency = DEFAULT_CURRENCY): Money {

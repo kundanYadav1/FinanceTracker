@@ -1,6 +1,6 @@
 import Svg, { Circle, Path } from 'react-native-svg';
 
-export type IconName = 'eye' | 'eye-off' | 'close' | 'search' | 'trash' | 'plus';
+export type IconName = 'eye' | 'eye-off' | 'close' | 'search' | 'trash' | 'plus' | 'bell';
 
 /** Lucide-style outline icons: 24px box, 1.75 stroke, rounded joins. */
 export function Icon({ name, color, size = 24 }: { name: IconName; color: string; size?: number }) {
@@ -41,6 +41,7 @@ export function Icon({ name, color, size = 24 }: { name: IconName; color: string
         </>
       )}
       {name === 'plus' && <Path d="M12 5v14M5 12h14" />}
+      {name === 'bell' && <Path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 21h4" />}
     </Svg>
   );
 }

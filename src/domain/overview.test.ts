@@ -3,7 +3,6 @@ import type { Transaction } from '@/db/transactions';
 import {
   budgetState,
   dateGroupLabel,
-  findInsight,
   groupByDate,
   sumMonth,
 } from './overview';
@@ -57,27 +56,5 @@ describe('grouping and totals', () => {
   it('sums a month by type', () => {
     const list = [tx({ date: '2026-11-02', cents: 100 }), tx({ date: '2026-10-02', cents: 900 })];
     expect(sumMonth(list, 'expense', '2026-11')).toBe(100);
-  });
-});
-
-describe('findInsight', () => {
-  const categories = [{ id: 'cat_food', type: 'expense' as const, name: 'Food', color: '', isDefault: true }];
-  const history = [
-    tx({ date: '2026-10-10', cents: 1500000 }),
-    tx({ date: '2026-09-10', cents: 1500000 }),
-    tx({ date: '2026-08-10', cents: 1500000 }),
-  ];
-
-  it('flags a category at least 15% above its 3-month average', () => {
-    const i = findInsight([...history, tx({ date: '2026-11-03', cents: 1845000 })], categories, now);
-    expect(i).toMatchObject({ categoryName: 'Food', percentAbove: 23, savingCents: 345000 });
-  });
-
-  it('returns null when spending is near the average', () => {
-    expect(findInsight([...history, tx({ date: '2026-11-03', cents: 1600000 })], categories, now)).toBeNull();
-  });
-
-  it('returns null without history to compare against', () => {
-    expect(findInsight([tx({ date: '2026-11-03', cents: 1845000 })], categories, now)).toBeNull();
   });
 });

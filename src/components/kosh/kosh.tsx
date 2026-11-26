@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from './icons';
 import {
   KeyboardAvoidingView,
@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type StyleProp,
   type TextProps,
@@ -492,15 +493,26 @@ export function BottomSheet({
   children: ReactNode;
 }) {
   const theme = useTheme();
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // A pixel bound (not a percentage): the parent has no fixed height, so '92%' let the sheet
+  // outgrow short or large-font screens and push its top off-screen.
+  const maxHeight = Math.max(height - insets.top - Space.s4, 200);
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.scrim }}>
         <Pressable accessibilityLabel="Close" style={{ flex: 1 }} onPress={onClose} />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <SafeAreaView
             edges={['bottom']}
             style={{
-              maxHeight: '92%',
+              maxHeight,
               backgroundColor: theme.surface200,
               borderTopLeftRadius: Radius.lg,
               borderTopRightRadius: Radius.lg,

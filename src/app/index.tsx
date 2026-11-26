@@ -1,15 +1,17 @@
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Icon } from '@/components/kosh/icons';
 import { KoshLogo } from '@/components/kosh/logo';
+import { RecommendationCard } from '@/components/recommendation-card';
 import {
   Amount,
+  BottomSheet,
   Button,
   Card,
   EmptyState,
   IconButton,
-  InsightCard,
   KText,
   ProgressBar,
   Screen,
@@ -21,7 +23,6 @@ import { Space } from '@/constants/theme';
 import { budgetWarnings, buildBudgetLines, monthlyBudgetSummary } from '@/domain/budget';
 import {
   daysLeftInMonth,
-  findInsight,
   groupByDate,
   monthKey,
   monthLabel,
@@ -29,6 +30,8 @@ import {
   sumMonth,
   toDateKey,
 } from '@/domain/overview';
+import { DASHBOARD_MAX } from '@/domain/recommendations';
+import { useRecommendations } from '@/hooks/use-recommendations';
 import { useTheme } from '@/hooks/use-theme';
 import { useTransactionEditor } from '@/hooks/use-transaction-editor';
 import { useAppStore } from '@/store/appStore';
@@ -58,7 +61,8 @@ export default function DashboardScreen() {
     (l) => (l.scope === 'overall' ? 'monthly budget' : `${categories.find((c) => c.id === l.categoryId)?.name ?? l.categoryId} budget`),
     (c, cur) => (hideAmounts ? 'Rs ••••' : formatRupees({ currency: cur, cents: c })),
   );
-  const insight = findInsight(transactions, categories, now);
+  const recs = useRecommendations();
+  const [allRecs, setAllRecs] = useState(false);
   const todayRows = groupByDate(transactions, now).find((g) => g.dateKey === today)?.rows ?? [];
   const featuredGoal = goals.find((g) => g.currentAmount.cents < g.targetAmount.cents) ?? goals[0];
 
@@ -80,11 +84,16 @@ export default function DashboardScreen() {
               <KText variant="caption">{monthLabel(now)}</KText>
             </View>
           </View>
-          <IconButton
-            label={hideAmounts ? 'Show amounts' : 'Hide amounts'}
-            onPress={toggleHideAmounts}>
-            <Icon name={hideAmounts ? 'eye-off' : 'eye'} color={theme.ink} />
-          </IconButton>
+          <View style={styles.actions}>
+            <IconButton label="Notification settings" onPress={() => router.push('/settings')}>
+              <Icon name="bell" color={theme.ink} />
+            </IconButton>
+            <IconButton
+              label={hideAmounts ? 'Show amounts' : 'Hide amounts'}
+              onPress={toggleHideAmounts}>
+              <Icon name={hideAmounts ? 'eye-off' : 'eye'} color={theme.ink} />
+            </IconButton>
+          </View>
         </View>
 
         <Card style={{ gap: Space.s3 }}>
@@ -215,23 +224,42 @@ export default function DashboardScreen() {
           )}
         </View>
 
-        {insight ? (
-          <InsightCard
-            tag={insight.categoryName}
-            title={`${insight.categoryName} spending is ${insight.percentAbove}% above your usual`}
-            body={`You spent ${formatRupees(money(insight.thisMonthCents))} on ${insight.categoryName.toLowerCase()} this month. Your 3-month average is ${formatRupees(money(insight.averageCents))}.`}
-            saving={money(insight.savingCents)}
-            action="See budgets"
-            onAction={() => router.push('/budgets')}
-          />
-        ) : null}
+        <View style={{ gap: Space.s3 }}>
+          <View style={styles.headRow}>
+            <SectionHeading>What you can improve</SectionHeading>
+            {recs.recommendations.length > DASHBOARD_MAX ? (
+              <Button variant="ghost" onPress={() => setAllRecs(true)}>
+                {`See all (${recs.recommendations.length})`}
+              </Button>
+            ) : null}
+          </View>
+          {recs.recommendations.slice(0, DASHBOARD_MAX).map((r) => (
+            <RecommendationCard key={r.key} rec={r} masked={hideAmounts} />
+          ))}
+          {recs.notices.map((n) => (
+            <KText key={n.id} variant="caption">
+              {n.text}
+            </KText>
+          ))}
+        </View>
       </Screen>
+      <BottomSheet visible={allRecs} title="All recommendations" onClose={() => setAllRecs(false)}>
+        {recs.recommendations.map((r) => (
+          <RecommendationCard key={r.key} rec={r} masked={hideAmounts} />
+        ))}
+        {recs.notices.map((n) => (
+          <KText key={n.id} variant="caption">
+            {n.text}
+          </KText>
+        ))}
+      </BottomSheet>
       {sheet}
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  actions: { flexDirection: 'row', alignItems: 'center', gap: Space.s2 },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Space.s3 },
   brand: { flexDirection: 'row', alignItems: 'center', gap: Space.s3, flexShrink: 1 },
   pair: { flexDirection: 'row', gap: Space.s3 },
