@@ -22,6 +22,8 @@ export async function closeDatabase(): Promise<void> {
 async function runMigrations(db: SQLiteDatabase): Promise<void> {
   const { SCHEMA_VERSION, migrationSql } = await import('./schema');
 
+  await db.execAsync('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)');
+
   const current = await db.getFirstAsync<{ version: number }>(
     'SELECT MAX(version) AS version FROM schema_migrations'
   );

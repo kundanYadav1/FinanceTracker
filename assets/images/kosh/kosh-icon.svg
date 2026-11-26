@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Kosh">
+<rect width="512" height="512" rx="112" fill="#0E5A52"></rect>
+<g transform="translate(-11 5)">
+<g fill="none" stroke="#F6F3EC" stroke-width="60" stroke-linecap="round" stroke-linejoin="round">
+<path d="M176 128V384"></path><path d="M180 262L336 136"></path><path d="M180 262L336 384"></path></g>
+<circle cx="346" cy="128" r="46" fill="#F2B01E"></circle>
+<circle cx="346" cy="128" r="26" fill="none" stroke="#0E5A52" stroke-width="8"></circle>
+</g>
+</svg>

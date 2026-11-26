@@ -1,265 +1,151 @@
-import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, StyleSheet, TextInput, View } from 'react-native';
 
-import { Button } from '@/components/ui/button';
-import { TransactionForm } from '@/components/transaction-form';
-import type { Category } from '@/db/seed';
-import type { Transaction, TransactionFilters } from '@/db/transactions';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Icon } from '@/components/kosh/icons';
+import {
+  Button,
+  Chip,
+  EmptyState,
+  IconButton,
+  KText,
+  Screen,
+  TransactionRow,
+} from '@/components/kosh/kosh';
+import { FontFamily, Radius, Space, TapMin } from '@/constants/theme';
+import { groupByDate, money } from '@/domain/overview';
 import { useTheme } from '@/hooks/use-theme';
-import { formatMoney } from '@/utils/money';
+import { useTransactionEditor } from '@/hooks/use-transaction-editor';
+import type { Transaction } from '@/db/transactions';
 import { useAppStore } from '@/store/appStore';
+import { formatRupees } from '@/utils/money';
+
+type TypeFilter = 'all' | 'expense' | 'income';
 
 export default function TransactionsScreen() {
   const theme = useTheme();
-  const {
-    transactions,
-    categories,
-    paymentMethods,
-    reloadTransactions,
-    addTransaction,
-    updateTransaction,
-    removeTransaction,
-  } = useAppStore();
+  const { transactions, categories, paymentMethods, removeTransaction, hideAmounts } = useAppStore();
+  const { openNew, openEdit, sheet } = useTransactionEditor();
 
+  const [filter, setFilter] = useState<TypeFilter>('all');
+  const [searching, setSearching] = useState(false);
   const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string | undefined>(undefined);
-  const [typeFilter, setTypeFilter] = useState<'income' | 'expense' | undefined>(undefined);
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
 
-  const inputStyle = {
-    backgroundColor: theme.background,
-    color: theme.text,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.three,
-    borderWidth: 1,
-    borderColor: theme.backgroundElement,
-    minHeight: 44,
-  } as const;
+  const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? id;
+  const pmName = (id?: string) => paymentMethods.find((p) => p.id === id)?.name;
 
-  const filters: TransactionFilters = {};
-  if (search) filters.search = search;
-  if (categoryFilter) filters.categoryId = categoryFilter;
-  if (typeFilter) filters.type = typeFilter;
-
+  const needle = search.trim().toLowerCase();
   const filtered = transactions.filter((t) => {
-    if (filters.search) {
-      const haystack = `${t.categoryId} ${t.note ?? ''}`.toLowerCase();
-      if (!haystack.includes(filters.search!.toLowerCase())) return false;
-    }
-    if (filters.categoryId && t.categoryId !== filters.categoryId) return false;
-    if (filters.type && t.type !== filters.type) return false;
+    if (filter !== 'all' && t.type !== filter) return false;
+    if (needle && !`${catName(t.categoryId)} ${t.note ?? ''}`.toLowerCase().includes(needle)) return false;
     return true;
   });
+  const groups = groupByDate(filtered, new Date());
 
-  const income = filtered.reduce((sum, t) => (t.type === 'income' ? sum + t.amount.cents : sum), 0);
-  const expense = filtered.reduce((sum, t) => (t.type === 'expense' ? sum + t.amount.cents : sum), 0);
-
-  const categoryOptions: Category[] = categories;
-
-  const handleSave = async (input: Parameters<typeof addTransaction>[0]) => {
-    if (editingId) {
-      await updateTransaction(editingId, input);
-    } else {
-      await addTransaction(input);
-    }
-    await reloadTransactions(filters);
-    setEditingId(null);
-    setShowForm(false);
-  };
+  const confirmDelete = (t: Transaction) =>
+    Alert.alert('Delete transaction?', `${t.note || catName(t.categoryId)} will be removed.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => removeTransaction(t.id) },
+    ]);
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <ThemedText type="title" style={styles.title}>Transactions</ThemedText>
-
-        <View style={styles.summaryRow}>
-          <SummaryChip label="Income" value={formatMoney({ currency: 'INR', cents: income })} positive />
-          <SummaryChip label="Expenses" value={formatMoney({ currency: 'INR', cents: expense })} positive={false} />
+    <>
+      <Screen>
+        <View style={styles.top}>
+          <KText variant="title" accessibilityRole="header">
+            Transactions
+          </KText>
+          <IconButton
+            label={searching ? 'Close search' : 'Search transactions'}
+            onPress={() => {
+              setSearching(!searching);
+              if (searching) setSearch('');
+            }}>
+            <Icon name={searching ? 'close' : 'search'} color={theme.ink} />
+          </IconButton>
         </View>
 
-        <View style={styles.filterBar}>
+        {searching ? (
           <TextInput
-            placeholder="Search transactions"
+            accessibilityLabel="Search transactions"
+            autoFocus
             value={search}
             onChangeText={setSearch}
-            style={[styles.searchInput, inputStyle]}
-            clearButtonMode="always"
+            placeholder="Search by category or note"
+            placeholderTextColor={theme.inkMuted}
+            style={[
+              styles.input,
+              { backgroundColor: theme.surface200, borderColor: theme.lineStrong, color: theme.ink },
+            ]}
           />
-          <View style={styles.filterRow}>
-            <ThemedText type="small">Category</ThemedText>
-            <Button
-              label={
-                categoryFilter
-                  ? categoryOptions.find((c) => c.id === categoryFilter)?.name ?? 'All'
-                  : 'All'
-              }
-              onPress={() => setCategoryFilter(undefined)}
-              type="default"
-            />
-            <Button
-              label={typeFilter ?? 'All'}
-              onPress={() => setTypeFilter(undefined)}
-              type="default"
-            />
-          </View>
+        ) : null}
+
+        <View style={styles.chips}>
+          <Chip label="All" selected={filter === 'all'} onPress={() => setFilter('all')} />
+          <Chip label="Expenses" selected={filter === 'expense'} onPress={() => setFilter('expense')} />
+          <Chip label="Income" selected={filter === 'income'} onPress={() => setFilter('income')} />
         </View>
 
-        <Button
-          label="Add Transaction"
-          onPress={() => {
-            setEditingId(null);
-            setShowForm(true);
-          }}
-          type="default"
-        />
-
-        {showForm && (
-          <ThemedView type="backgroundElement" style={styles.formCard}>
-            <TransactionForm
-              categories={categoryOptions}
-              paymentMethods={paymentMethods}
-              transaction={editingId ? transactions.find((t) => t.id === editingId) : undefined}
-              onSave={handleSave}
-              onCancel={() => setShowForm(false)}
-            />
-          </ThemedView>
-        )}
-
-        <ThemedText type="smallBold" style={styles.listTitle}>
-          {filtered.length} transaction{filtered.length === 1 ? '' : 's'}
-        </ThemedText>
-
-        {filtered.length === 0 ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
-            No transactions match your filters.
-          </ThemedText>
+        {groups.length === 0 ? (
+          <EmptyState
+            message={
+              transactions.length === 0
+                ? 'No transactions yet. Add your first expense or income.'
+                : 'No transactions match your filters.'
+            }
+            action={transactions.length === 0 ? 'Add expense' : undefined}
+            onAction={() => openNew('expense')}
+          />
         ) : (
-          <View style={styles.list}>
-            {filtered.map((t) => (
-              <TransactionRow
-                key={t.id}
-                transaction={t}
-                onPress={() => { setEditingId(t.id); setShowForm(true); }}
-                onDelete={() => removeTransaction(t.id)}
-              />
-            ))}
-          </View>
+          groups.map((g) => (
+            <View key={g.dateKey} style={{ gap: Space.s3 }}>
+              <View style={styles.groupHead}>
+                <KText variant="heading" accessibilityRole="header">
+                  {g.label}
+                </KText>
+                <KText variant="caption" style={{ fontVariant: ['tabular-nums'] }}>
+                  {hideAmounts
+                    ? 'Rs ••••'
+                    : formatRupees(money(g.netCents), g.netCents >= 0 ? '+' : '−')}
+                </KText>
+              </View>
+              <View style={{ gap: Space.s2 }}>
+                {g.rows.map((t) => (
+                  <TransactionRow
+                    key={t.id}
+                    category={catName(t.categoryId)}
+                    note={t.note}
+                    type={t.type}
+                    money={t.amount}
+                    meta={pmName(t.paymentMethodId)}
+                    masked={hideAmounts}
+                    onPress={() => openEdit(t)}
+                    onDelete={() => confirmDelete(t)}
+                  />
+                ))}
+              </View>
+            </View>
+          ))
         )}
-      </ScrollView>
-    </ThemedView>
-  );
-}
 
-function SummaryChip({ label, value, positive }: { label: string; value: string; positive: boolean }) {
-  return (
-    <ThemedView
-      type="backgroundElement"
-      style={[styles.summaryChip, { borderLeftColor: positive ? '#4db6ac' : '#e57373' }]}
-    >
-      <ThemedText type="small" themeColor="textSecondary">
-        {label}
-      </ThemedText>
-      <ThemedText type="title" style={styles.statValue}>
-        {value}
-      </ThemedText>
-    </ThemedView>
-  );
-}
-
-function TransactionRow({
-  transaction,
-  onPress,
-  onDelete,
-}: {
-  transaction: Transaction;
-  onPress: () => void;
-  onDelete: () => void;
-}) {
-  const isIncome = transaction.type === 'income';
-  return (
-    <ThemedView
-      type="backgroundElement"
-      style={[styles.row, { borderLeftColor: isIncome ? '#4db6ac' : '#e57373' }]}
-    >
-      <Pressable style={styles.rowPressable} onPress={onPress}>
-        <ThemedView style={styles.rowContent}>
-          <ThemedText type="default" numberOfLines={1}>
-            {transaction.categoryId}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {transaction.date}
-          </ThemedText>
-          {transaction.note && (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-              {transaction.note}
-            </ThemedText>
-          )}
-        </ThemedView>
-      </Pressable>
-      <ThemedView style={styles.rowActions}>
-        <ThemedText
-          type="default"
-          style={{ color: isIncome ? '#4db6ac' : '#e57373', fontWeight: '600' }}
-        >
-          {formatMoney(transaction.amount)}
-        </ThemedText>
-        <PressableDelete onPress={onDelete} />
-      </ThemedView>
-    </ThemedView>
-  );
-}
-
-function PressableDelete({ onPress }: { onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{ paddingHorizontal: Spacing.three, paddingVertical: Spacing.two }}
-      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-      <ThemedText type="small" style={{ color: '#e57373', fontWeight: '600' }}>
-        Delete
-      </ThemedText>
-    </Pressable>
+        <Button block onPress={() => openNew('expense')}>
+          Add transaction
+        </Button>
+      </Screen>
+      {sheet}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContent: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.six },
-  title: { fontSize: 32, fontWeight: 600, lineHeight: 44 },
-  summaryRow: { flexDirection: 'row', gap: Spacing.three, marginBottom: Spacing.four },
-  summaryChip: {
-    flex: 1,
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
-    borderLeftWidth: 4,
-    minWidth: 130,
+  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.s2 },
+  groupHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  input: {
+    minHeight: TapMin,
+    borderWidth: 2,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Space.s3,
+    fontFamily: FontFamily.sans500,
+    fontSize: 15,
   },
-  statValue: { fontSize: 20, fontWeight: 600, marginTop: Spacing.half },
-  filterBar: { flexDirection: 'row', gap: Spacing.three, marginBottom: Spacing.four, flexWrap: 'wrap' },
-  searchInput: {
-    flex: 1,
-    minHeight: 44,
-  },
-  filterRow: { flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.three },
-  formCard: { marginBottom: Spacing.four, padding: Spacing.four, borderRadius: Spacing.three },
-  listTitle: { fontSize: 14, fontWeight: 700, marginBottom: Spacing.three },
-  empty: { paddingVertical: Spacing.four, textAlign: 'center' },
-  list: { gap: Spacing.two },
-  row: {
-    flexDirection: 'row',
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
-    borderLeftWidth: 4,
-    marginBottom: Spacing.two,
-  },
-  rowPressable: { flex: 1 },
-  rowContent: { flex: 1, gap: Spacing.half },
-  note: { fontStyle: 'italic' },
-  rowActions: { gap: Spacing.two, alignItems: 'center' },
 });

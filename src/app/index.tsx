@@ -1,132 +1,222 @@
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { Button } from '@/components/ui/button';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
-import { formatMoney } from '@/utils/money';
+import { Icon } from '@/components/kosh/icons';
+import { KoshLogo } from '@/components/kosh/logo';
+import {
+  Amount,
+  Button,
+  Card,
+  EmptyState,
+  IconButton,
+  InsightCard,
+  KText,
+  ProgressBar,
+  Screen,
+  SectionHeading,
+  StatTile,
+  TransactionRow,
+} from '@/components/kosh/kosh';
+import { Space } from '@/constants/theme';
+import {
+  daysLeftInMonth,
+  findInsight,
+  groupByDate,
+  monthKey,
+  monthLabel,
+  monthlyLimit,
+  money,
+  sumMonth,
+  toDateKey,
+} from '@/domain/overview';
+import { useTheme } from '@/hooks/use-theme';
+import { useTransactionEditor } from '@/hooks/use-transaction-editor';
 import { useAppStore } from '@/store/appStore';
-import type { Transaction } from '@/db/transactions';
+import { formatRupees } from '@/utils/money';
+
+function greeting(hour: number): string {
+  return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { transactions, getTotals } = useAppStore();
+  const theme = useTheme();
+  const { transactions, categories, budgets, goals, paymentMethods, hideAmounts, toggleHideAmounts } =
+    useAppStore();
+  const { openNew, openEdit, sheet } = useTransactionEditor();
 
-  const income = getTotals('income');
-  const expenses = getTotals('expense');
-  const savings = { currency: 'INR', cents: income.cents - expenses.cents };
-  const recent = transactions.slice(0, 5);
+  const now = new Date();
+  const month = monthKey(now);
+  const today = toDateKey(now);
+  const income = sumMonth(transactions, 'income', month);
+  const expenses = sumMonth(transactions, 'expense', month);
+  const saved = income - expenses;
+  const limit = monthlyLimit(budgets, transactions, today);
+  const insight = findInsight(transactions, categories, now);
+  const todayRows = groupByDate(transactions, now).find((g) => g.dateKey === today)?.rows ?? [];
+  const featuredGoal = goals.find((g) => g.currentAmount.cents < g.targetAmount.cents) ?? goals[0];
+
+  const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? id;
+  const pmName = (id?: string) => paymentMethods.find((p) => p.id === id)?.name;
+
+  const heroCents = limit ? limit.limitCents - limit.spentCents : saved;
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <ThemedText type="title" style={styles.title}>
-          Dashboard
-        </ThemedText>
-        <ThemedText type="small" style={styles.subtitle}>
-          Your financial snapshot
-        </ThemedText>
-
-        <View style={styles.cardRow}>
-          <StatCard label="Income" value={formatMoney(income)} positive />
-          <StatCard label="Expenses" value={formatMoney(expenses)} positive={false} />
-          <StatCard label="Savings" value={formatMoney(savings)} positive />
+    <>
+      <Screen>
+        <View style={styles.top}>
+          <View style={styles.brand}>
+            <KoshLogo size={44} />
+            <View style={{ flexShrink: 1 }}>
+              <KText variant="title" accessibilityRole="header">
+                {greeting(now.getHours())}
+              </KText>
+              <KText variant="caption">{monthLabel(now)}</KText>
+            </View>
+          </View>
+          <IconButton
+            label={hideAmounts ? 'Show amounts' : 'Hide amounts'}
+            onPress={toggleHideAmounts}>
+            <Icon name={hideAmounts ? 'eye-off' : 'eye'} color={theme.ink} />
+          </IconButton>
         </View>
 
-        <View style={styles.section}>
-          <ThemedText type="smallBold" style={styles.sectionTitle}>
-            Quick actions
-          </ThemedText>
-          <View style={styles.actionRow}>
-            <Button onPress={() => router.push('/transactions')} label="Add Expense" type="expense" />
-            <Button onPress={() => router.push('/transactions')} label="Add Income" type="income" />
-            <Button onPress={() => router.push('/goals')} label="Savings Goals" type="default" />
-            <Button onPress={() => router.push('/budgets')} label="Budgets" type="default" />
+        <Card style={{ gap: Space.s3 }}>
+          <KText variant="overline">{limit ? 'Left to spend this month' : 'Saved this month'}</KText>
+          <Amount money={money(heroCents)} size="xl" masked={hideAmounts} />
+          {limit ? (
+            <>
+              <KText variant="caption">
+                {`of ${hideAmounts ? 'Rs ••••' : formatRupees(money(limit.limitCents))} monthly limit · ${daysLeftInMonth(now)} days left`}
+              </KText>
+              <ProgressBar
+                label="Monthly limit used"
+                value={limit.percent}
+                detail={
+                  hideAmounts
+                    ? undefined
+                    : limit.limitCents >= limit.spentCents
+                      ? `${formatRupees(money(limit.limitCents - limit.spentCents))} left`
+                      : `${formatRupees(money(limit.spentCents - limit.limitCents))} over`
+                }
+              />
+            </>
+          ) : (
+            <KText variant="caption">Set a budget to see how much you can still spend.</KText>
+          )}
+        </Card>
+
+        <View style={styles.pair}>
+          <Button block onPress={() => openNew('expense')} style={{ flex: 1 }}>
+            Add expense
+          </Button>
+          <Button block variant="secondary" onPress={() => openNew('income')} style={{ flex: 1 }}>
+            Add income
+          </Button>
+        </View>
+
+        <View style={{ gap: Space.s3 }}>
+          <SectionHeading>This month</SectionHeading>
+          <View style={styles.grid}>
+            <View style={styles.half}>
+              <StatTile label="Income" money={money(income)} tone="in" masked={hideAmounts} />
+            </View>
+            <View style={styles.half}>
+              <StatTile label="Expenses" money={money(expenses)} tone="out" masked={hideAmounts} />
+            </View>
+            <View style={styles.full}>
+              <StatTile
+                label="Saved"
+                money={money(saved)}
+                caption={
+                  income > 0 ? `${Math.round((saved / income) * 100)}% of income` : undefined
+                }
+                masked={hideAmounts}
+              />
+            </View>
           </View>
         </View>
 
-        <View style={styles.section}>
-          <ThemedText type="smallBold" style={styles.sectionTitle}>
-            Recent transactions
-          </ThemedText>
-          {recent.length === 0 ? (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
-              No transactions yet. Add your first expense or income.
-            </ThemedText>
+        {featuredGoal ? (
+          <View style={{ gap: Space.s3 }}>
+            <View style={styles.headRow}>
+              <SectionHeading>Savings goal</SectionHeading>
+              <Button variant="ghost" onPress={() => router.push('/goals')}>
+                All goals
+              </Button>
+            </View>
+            <Card>
+              <ProgressBar
+                label={featuredGoal.name}
+                kind="goal"
+                value={
+                  featuredGoal.targetAmount.cents > 0
+                    ? (featuredGoal.currentAmount.cents / featuredGoal.targetAmount.cents) * 100
+                    : 0
+                }
+                detail={
+                  hideAmounts
+                    ? undefined
+                    : `${formatRupees(featuredGoal.currentAmount)} of ${formatRupees(featuredGoal.targetAmount)}`
+                }
+              />
+            </Card>
+          </View>
+        ) : null}
+
+        <View style={{ gap: Space.s3 }}>
+          <View style={styles.headRow}>
+            <SectionHeading>Today</SectionHeading>
+            <Button variant="ghost" onPress={() => router.push('/transactions')}>
+              See all
+            </Button>
+          </View>
+          {todayRows.length === 0 ? (
+            <EmptyState
+              message="Nothing recorded today. Add what you spent or received."
+              action="Add expense"
+              onAction={() => openNew('expense')}
+            />
           ) : (
-            <View style={styles.list}>
-              {recent.map((t) => (
-                <TransactionRow key={t.id} transaction={t} />
+            <View style={{ gap: Space.s2 }}>
+              {todayRows.map((t) => (
+                <TransactionRow
+                  key={t.id}
+                  category={catName(t.categoryId)}
+                  note={t.note}
+                  type={t.type}
+                  money={t.amount}
+                  meta={pmName(t.paymentMethodId)}
+                  masked={hideAmounts}
+                  onPress={() => openEdit(t)}
+                />
               ))}
             </View>
           )}
         </View>
-      </ScrollView>
-    </ThemedView>
-  );
-}
 
-function StatCard({ label, value, positive }: { label: string; value: string; positive: boolean }) {
-  return (
-    <ThemedView
-      type="backgroundElement"
-      style={[styles.statCard, { borderLeftColor: positive ? '#4db6ac' : '#e57373' }]}>
-      <ThemedText type="small" themeColor="textSecondary">
-        {label}
-      </ThemedText>
-      <ThemedText type="title" style={styles.statValue}>
-        {value}
-      </ThemedText>
-    </ThemedView>
-  );
-}
-
-function TransactionRow({ transaction }: { transaction: Transaction }) {
-  const isIncome = transaction.type === 'income';
-  return (
-    <ThemedView
-      type="backgroundElement"
-      style={[styles.row, { borderLeftColor: isIncome ? '#4db6ac' : '#e57373' }]}
-    >
-      <ThemedText type="default">
-        {transaction.type === 'income' ? 'Income' : 'Expense'} · {transaction.date}
-      </ThemedText>
-      <ThemedText
-        type="default"
-        style={{ color: isIncome ? '#4db6ac' : '#e57373', fontWeight: '600' }}
-      >
-        {formatMoney(transaction.amount)}
-      </ThemedText>
-    </ThemedView>
+        {insight ? (
+          <InsightCard
+            tag={insight.categoryName}
+            title={`${insight.categoryName} spending is ${insight.percentAbove}% above your usual`}
+            body={`You spent ${formatRupees(money(insight.thisMonthCents))} on ${insight.categoryName.toLowerCase()} this month. Your 3-month average is ${formatRupees(money(insight.averageCents))}.`}
+            saving={money(insight.savingCents)}
+            action="See budgets"
+            onAction={() => router.push('/budgets')}
+          />
+        ) : null}
+      </Screen>
+      {sheet}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContent: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.six },
-  title: { fontSize: 32, fontWeight: 600, lineHeight: 44 },
-  subtitle: { fontSize: 14, lineHeight: 20, marginBottom: Spacing.four },
-  cardRow: { flexDirection: 'row', gap: Spacing.three, marginBottom: Spacing.four },
-  statCard: {
-    flex: 1,
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
-    borderLeftWidth: 4,
-    minWidth: 120,
-  },
-  statValue: { fontSize: 20, fontWeight: 600, marginTop: Spacing.half },
-  section: { marginBottom: Spacing.four },
-  sectionTitle: { fontSize: 14, fontWeight: 700, marginBottom: Spacing.three },
-  actionRow: { flexDirection: 'row', gap: Spacing.three, flexWrap: 'wrap' },
-  empty: { paddingVertical: Spacing.four, textAlign: 'center' },
-  list: { gap: Spacing.two },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.two,
-    borderLeftWidth: 4,
-  },
+  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Space.s3 },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: Space.s3, flexShrink: 1 },
+  pair: { flexDirection: 'row', gap: Space.s3 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.s3 },
+  half: { flexBasis: '47%', flexGrow: 1, minWidth: 0 },
+  full: { flexBasis: '100%' },
+  headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 });

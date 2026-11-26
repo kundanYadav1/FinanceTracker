@@ -2,13 +2,21 @@
 
 ## Phase 1 — Product Requirements Specification (PRS)
 
-**Document Status:** Draft for approval
+**Document Status:** Revised draft v1.1 — product decisions accepted, pending final SPEC re-review
+**Version:** 1.1 (2026-11-06)
 **Phase:** 1 — SPEC
 **Product Type:** Local-first personal finance mobile application
 **Primary Platform:** Android
 **Secondary Platform:** iOS
 **Framework Constraint:** React Native + Expo
 **Primary Language:** TypeScript
+
+## Change Log
+
+| Version | Date | Change | Approval |
+|---|---|---|---|
+| 1.0 | — | Initial draft. | Draft |
+| 1.1 | 2026-11-06 | Merged review `docs/specs/prs-phase-1-review.md` (RC-01 – RC-32). All recommended defaults for product decisions PD-01 – PD-20 accepted. | Product owner accepted PD-01 – PD-20 defaults on 2026-11-06 |
 
 ---
 
@@ -127,6 +135,16 @@ The MVP consists of six primary product areas:
 
 Settings and data export are supporting capabilities.
 
+## 5.1 MVP Feature Status
+
+| Status | Requirements |
+|---|---|
+| MVP | FR-001, FR-002, FR-003, FR-003A, FR-004 (default categories only), FR-005, FR-006, FR-007, FR-008, FR-009, FR-010, FR-011, FR-012, FR-013, FR-014, FR-015, FR-016, FR-017, FR-018 (MVP reports per FR-018.1), FR-019, FR-022 (JSON export only), FR-024, FR-025 (MVP settings per FR-025.1), FR-026, FR-027 |
+| MVP+ | FR-004 custom categories, FR-018 trend/history reports, FR-020 recurring schedules, FR-021 notifications, FR-022 CSV export, FR-025 app lock |
+| Deferred (requires own specification) | FR-023 data restore, database encryption |
+
+A requirement not listed as MVP shall not be implemented in the MVP.
+
 ---
 
 # 6. Feature Requirements
@@ -138,15 +156,25 @@ The application shall allow a user to configure a basic personal profile.
 The profile shall support:
 
 * Name
-* Preferred currency
-* Basic application preferences
+* Primary currency
+* Theme preference (system / light / dark)
 
 The profile must not require account registration.
+
+**FR-001.1** The application shall use exactly one primary currency per installation. The user shall select it from the supported-currency list before recording any financial data.
+
+**FR-001.2** Supported currencies for the MVP: INR (2 decimal places).
+
+**FR-001.3** Every stored monetary value shall record its currency. In the MVP every stored monetary value shall be in the primary currency.
+
+**FR-001.4** The primary currency may be changed only while no transactions, budgets or savings goals exist. If any exist, the application shall prevent the change and explain that changing currency would misrepresent existing records and that currency conversion is not supported.
 
 ### Acceptance Criteria
 
 * User can enter or modify their name.
 * User can select a supported currency.
+* User cannot record financial data before a primary currency is selected.
+* Changing the primary currency is refused, with an explanation, while any transaction, budget or savings goal exists.
 * Profile information persists after application restart.
 * The app remains usable without network connectivity.
 * No authentication is required for MVP access.
@@ -177,20 +205,26 @@ The user shall be able to:
 * View expenses by date.
 * View expenses by category.
 
+**FR-002.1** The recurring flag on a transaction is information only. In the MVP it shall not create, schedule or change any other transaction.
+
+**FR-002.2** Search shall match text in the transaction note and the category name, case-insensitively.
+
+**FR-002.3** Transactions can be filtered by date period (FR-019), type (income/expense), category and payment method. Filters can be combined.
+
 ### Acceptance Criteria
 
-A valid expense must not be saved unless:
+A valid expense must not be saved unless it satisfies FR-003A, including:
 
 * Amount is valid.
 * Category is selected.
+* Payment method is selected.
 * Date is valid.
 
 After saving:
 
 * The transaction appears in transaction history.
-* Dashboard totals update.
-* Relevant budget calculations update.
-* Relevant recommendations can update.
+* Every total, budget status and savings figure whose period includes the transaction's date reflects the change.
+* Recommendations and goal tracking states reflect the changed data the next time they are displayed, without restarting the application.
 * Data persists after app restart.
 
 ---
@@ -216,6 +250,10 @@ Example sources:
 * Rental
 * Other
 
+**FR-003.1** The income source is the income category (FR-004). Income does not record a payment method.
+
+**FR-003.2** The recurring flag on income is information only (FR-002.1).
+
 ### Acceptance Criteria
 
 The user can:
@@ -224,8 +262,24 @@ The user can:
 * Edit income.
 * Delete income.
 * View income history.
-* Filter income.
-* Include income in financial calculations.
+* Filter income (FR-002.3).
+* Include income in financial calculations (FR-007, FR-011).
+
+---
+
+# 8.1 FR-003A — Input Validation
+
+1. A transaction amount shall be greater than zero. Whether money comes in or goes out is determined only by the transaction type.
+2. The maximum amount for a single transaction, budget, goal target or goal saved amount is 9,999,999,999 smallest currency units (₹99,999,999.99).
+3. Amounts shall be rejected if they have more decimal places than the currency allows, contain non-numeric characters other than digit-grouping separators and one decimal separator, or are empty. Excess decimals are rejected, not rounded.
+4. A transaction date is required and must satisfy FR-019.5.
+5. A category is required. Payment method is required for expenses.
+6. A note is optional, with a maximum of 200 characters.
+7. A goal name is required, 1–60 characters. A goal target amount shall be greater than zero. A goal target date shall be today or later when the goal is created.
+8. A budget amount shall be zero or greater.
+9. Every rejected input shall show a message that names the field and the rule that was broken.
+
+Refunds, reversals and transfers between the user's own accounts are out of scope for the MVP (§36).
 
 ---
 
@@ -260,9 +314,17 @@ Default income categories should include:
 
 The exact category set may be refined during DESIGN.
 
+**FR-004.1** Each default expense category has a fixed spending class:
+
+* *Essential:* Groceries, Transport, Rent, Bills, Health, Education, EMI
+* *Discretionary:* Food (eating out, takeaway, food delivery), Shopping, Entertainment, Travel, Subscriptions
+* *Unclassified:* Other
+
+The user cannot change a category's spending class in the MVP (MVP+).
+
 The user should eventually be able to create custom categories.
 
-Custom category management is considered an MVP+ requirement unless required by the final UX design.
+Custom category management is MVP+.
 
 ---
 
@@ -282,6 +344,8 @@ Initial methods:
 The application must not connect directly to banking or payment providers in the MVP.
 
 Payment method is recorded metadata only.
+
+**FR-005.1** Payment method is required for expenses. The form shall preselect the most recently used payment method, or Cash if none has been used.
 
 ---
 
@@ -310,15 +374,25 @@ Savings        ₹15,000
 Savings Rate        30%
 ```
 
+**FR-006.1** The dashboard defaults to the current month and shows at most 3 recommendations, ordered by priority. The full list is available on the Recommendations screen.
+
+**FR-006.2 Empty states.** When there is no data for a dashboard element, the element shall say so and explain what the user can do. It shall not show figures that could be read as real zero values without explanation. Specifically:
+
+* No transactions in the period: totals show zero with a "No transactions in this period" message and an action to add one.
+* No income in the period: savings rate shows "not available" (FR-007.2).
+* No budgets: budget status shows an action to create a budget.
+* No goals: goal progress shows an action to create a goal.
+* No recommendations, or insufficient history: the reason is stated (e.g. FR-013.2).
+
 ### Acceptance Criteria
 
 When a transaction is added, edited, or deleted:
 
-* Relevant totals update.
+* Every total whose period includes the transaction's date reflects the change.
 * Savings update.
 * Savings rate updates.
-* Relevant budget values update.
-* Relevant goal projections can update.
+* Budget values whose month includes the transaction's date update.
+* Goal tracking states and projections reflect the changed data the next time they are displayed.
 
 ---
 
@@ -341,6 +415,16 @@ Savings Rate =
 Special handling is required when income is zero.
 
 The application must never divide by zero.
+
+**FR-007.0** *Savings for a period* = total income − total expenses for transactions dated within that period. *Monthly savings* is savings for a month period (FR-019.3). When a custom range is selected, the value shall be labelled "Savings", not "Monthly Savings".
+
+**FR-007.1** Savings may be negative and shall be shown with a clear negative indicator. It shall not be shown as zero.
+
+**FR-007.2** When total income for the period is zero, savings rate shall be shown as "not available" with an explanation (e.g. "No income recorded for this period"). It shall not be shown as 0%, −100%, infinity or an error.
+
+**FR-007.3** When savings are negative and income is greater than zero, savings rate shall be shown as a negative percentage.
+
+**FR-007.4** Percentages shown to the user are rounded to one decimal place, with halves rounded away from zero. Rounding applies only to display; stored and intermediate values shall not be rounded.
 
 ### Acceptance Criteria
 
@@ -378,15 +462,31 @@ Exceeded
 
 Threshold values will be finalized during DESIGN.
 
+**FR-008.1** Budgets apply to calendar months (FR-019.3). Custom budget periods are out of scope for the MVP.
+
+**FR-008.2** A user may define at most one overall monthly budget and at most one budget per expense category for any month. Category budgets are independent of the overall budget; their sum may exceed it.
+
+**FR-008.3** A budget stays in effect for later months until the user changes or removes it. Changing or removing a budget shall affect the current month and later months only. The budget amount in effect for every past month shall be kept and used when that month is reported.
+
+**FR-008.4** Spending against a budget is the sum of expense transactions dated within that month (and, for a category budget, in that category).
+
+**FR-008.5** Unspent budget does not carry over to the next month.
+
+**FR-008.6** For a zero budget, utilization percentage is not shown; status is Healthy when spending is zero and Exceeded when spending is greater than zero.
+
+**FR-008.7** Status is Exceeded when spending is greater than the budget amount. Spending exactly equal to the budget is not Exceeded. The Warning threshold is defined in DESIGN as a single percentage below 100%.
+
+**FR-008.8** Amount remaining is never shown as negative; when spending exceeds the budget, the overspent amount is shown instead.
+
 ### Acceptance Criteria
 
 The application must:
 
 * Show actual spending against the budget.
-* Update budget status after transaction changes.
-* Handle zero-value budgets safely.
-* Handle budget periods correctly.
-* Preserve historical budget information.
+* Update budget status after transaction changes (FR-008.4).
+* Handle zero-value budgets per FR-008.6.
+* Apply budgets to calendar months per FR-008.1 – FR-008.5.
+* Report each past month against the budget amount that was in effect for that month (FR-008.3).
 
 ---
 
@@ -401,7 +501,13 @@ Each goal shall include:
 * Current saved amount
 * Target date
 * Priority
-* Status
+* Lifecycle status (FR-009.2)
+
+**FR-009.1** A goal's current saved amount is entered and updated by the user. It is not calculated from transactions. It can go up or down. It shall not be negative.
+
+**FR-009.2** A goal has a *lifecycle status* set by the user: Active, Paused, or Archived. Only Active goals take part in tracking (FR-011) and in savings-gap calculations (FR-015).
+
+**FR-009.3** When expected monthly saving (FR-011.1) is unavailable, zero or negative, no projected completion date is shown, and the reason is stated.
 
 Example:
 
@@ -442,7 +548,20 @@ The calculation must handle:
 * Zero remaining amount.
 * Target amount below current savings.
 
-The exact definition of "saving period" will be finalized during DESIGN.
+**FR-010.1** *Remaining saving periods* = the number of calendar months from the current month through the month containing the target date, counting both.
+
+**FR-010.2** Required monthly saving = remaining amount ÷ remaining saving periods, rounded **up** to the currency's smallest unit.
+
+**FR-010.3** Edge-case results:
+
+| Condition | Remaining amount | Required monthly saving | Tracking state |
+|---|---|---|---|
+| Current ≥ target | 0 | 0 | Completed |
+| Target date before today and current < target | target − current | not calculated | Expired |
+| Target date in the current month | target − current | target − current | per FR-011 |
+| Target amount ≤ 0 | — | invalid; goal cannot be saved (FR-003A) | — |
+
+Remaining amount shall never be shown as negative.
 
 ---
 
@@ -470,7 +589,11 @@ Completed
 Expired
 ```
 
-The state rules will be defined during DESIGN.
+**FR-011.1** *Expected monthly saving* is the average of monthly savings (FR-007.0) over the most recent complete months (FR-019.6), up to 3, in which at least one transaction exists. If no complete month exists, expected monthly saving is *unavailable*, and goal tracking states that depend on it shall not be shown.
+
+**FR-011.2** A goal has a *tracking state* calculated by the application and never stored as user input: Completed, Expired, On Track, At Risk, or Behind.
+
+**FR-011.3** States are evaluated in this order of precedence: Completed (current ≥ target) → Expired (target date before today) → On Track / At Risk / Behind. The rules for the last three are defined in DESIGN, must be deterministic, and must be explainable to the user using the values involved.
 
 ---
 
@@ -486,9 +609,15 @@ It shall analyze:
 * Historical spending
 * Budgets
 * Savings goals
-* Recurring expenses
+* Recurring expenses (MVP+, once FR-020 is specified)
 
 The engine shall generate recommendations when meaningful opportunities or risks are detected.
+
+**FR-012.1** A recommendation is generated only when a named rule's conditions are met. Each rule's conditions and thresholds shall be documented in DESIGN, and the rule shall be identifiable in the recommendation's explanation.
+
+**FR-012.2** Recommendations are calculated from the current local data each time they are displayed. They shall reflect any transaction, budget or goal change immediately.
+
+**FR-012.3** The dashboard shall show at most 3 recommendations, ordered by priority. Dismissing or snoozing recommendations is out of scope for the MVP.
 
 ---
 
@@ -515,6 +644,16 @@ Your food spending is above your normal level.
 ```
 
 The precise anomaly threshold will be defined during DESIGN.
+
+**FR-013.1** The historical average for a category is the mean of its spending over the 3 most recent complete months before the evaluated month. A month with no spending in the category counts as zero.
+
+**FR-013.2** Anomaly recommendations require at least 3 complete months of transaction history. With less history, no anomaly recommendation is generated, and the application shall show that more history is needed.
+
+**FR-013.3** For the current incomplete month, an anomaly may be reported only when month-to-date spending in the category already exceeds the category's historical full-month average. The application shall not project or extrapolate incomplete-month spending.
+
+**FR-013.4** No anomaly is reported for a category whose historical average is zero; the application shall not show an infinite or undefined percentage increase.
+
+**FR-013.5** Anomalies in Essential or Unclassified categories (FR-004.1) are informational only and shall not suggest reducing spending (§32, FR-016.1).
 
 ---
 
@@ -558,23 +697,27 @@ Gap:
 
 The application should then identify potentially reducible discretionary spending.
 
+**FR-015.1** The savings gap is calculated across all Active, not-completed goals: *total required monthly saving* (sum of each goal's FR-010 result) minus *expected monthly saving* (FR-011.1). A gap exists only when that difference is greater than zero. The application shall not present any single goal as fully funded while the total is unfunded.
+
+**FR-015.2** When expected monthly saving is unavailable, no savings gap is calculated; the application shows the total required monthly saving as a fact only.
+
 ---
 
 # 21. FR-016 — Expense Reduction Suggestions
 
 The recommendation engine should prioritize discretionary expenses where possible.
 
-Potential categories:
+Potential categories (Discretionary per FR-004.1):
 
+* Food (eating out, takeaway, food delivery)
 * Shopping
-* Dining
 * Entertainment
 * Subscriptions
 * Travel
 
 The system should not automatically recommend reducing essential expenses simply because they are large.
 
-The precise classification rules will be defined in DESIGN.
+**FR-016.1** Reduction suggestions shall be generated only for Discretionary categories (FR-004.1). Essential and Unclassified categories may appear in informational insights but shall never be the subject of a suggestion to reduce spending.
 
 ---
 
@@ -599,13 +742,15 @@ You spent ₹5,200 this month,
 which is 30% above your normal average.
 
 Potential savings:
-₹1,000–₹1,500/month.
+up to ₹1,200 this month (estimate).
 
 Suggested action:
 Reduce non-essential shopping this month.
 ```
 
 The application should not present speculative recommendations as guaranteed savings.
+
+**FR-017.1** Potential savings, where shown, shall not exceed the category's spending above its historical average for the evaluated month. It shall be labelled as an estimate (e.g. "up to ₹X"), shall never be described as guaranteed, and shall be omitted when it cannot be calculated from stored data.
 
 ---
 
@@ -625,6 +770,13 @@ Initial reports:
 
 The reports must be generated from local data.
 
+**FR-018.1 MVP reports.** For a selected period (FR-019):
+
+* Total income, total expenses and savings (FR-007).
+* Category spending: each expense category's total, in descending order of amount, with its share of total expenses. The category totals shall add up exactly to total expenses.
+
+**FR-018.2 MVP+ reports.** Savings trend, budget performance history and goal progress history are MVP+.
+
 ---
 
 # 24. FR-019 — Date Filtering
@@ -637,11 +789,27 @@ The user should be able to view financial data by:
 
 The initial date implementation will use the user's device-local calendar/timezone.
 
-Time-zone behavior and date-boundary rules must be explicitly defined during DESIGN.
+**FR-019.1 Transaction date.** A transaction date is a calendar date (year, month, day) with no time of day or time zone. Once saved, it shall not change because of a device time zone or clock change.
+
+**FR-019.2 Today.** "Today" is the current calendar date in the device's time zone at the moment of evaluation.
+
+**FR-019.3 Month period.** A month period runs from the first to the last calendar day of the month, both inclusive, including 29 February in leap years.
+
+**FR-019.4 Custom range.** A custom range includes its start and end dates. The start date shall not be after the end date.
+
+**FR-019.5 Future dates.** A transaction date shall not be later than today.
+
+**FR-019.6 Complete and incomplete months.** A month is *complete* when today is after its last day. The current month is *incomplete*. Calculations that compare against historical behavior (FR-011, FR-013, FR-015) shall use complete months as their history, and shall not present an incomplete month's total as if it were a full month's.
+
+**FR-019.7** Recommendations and goal calculations evaluate calendar months only; a custom range affects displayed totals and reports, not recommendation rules.
 
 ---
 
 # 25. FR-020 — Recurring Transactions
+
+**Status: MVP+.** In the MVP, the recurring flag on a transaction is information only (FR-002.1).
+
+Recurring schedules that create transactions require their own specification. That specification shall define generation (automatic vs user-confirmed), catch-up after the app hasn't been opened for some time, prevention of duplicate occurrences, handling of days 29–31 and 29 February, and the effect of editing or deleting a schedule on occurrences already created.
 
 The application shall support recurring income and expenses.
 
@@ -682,6 +850,8 @@ Notifications must be user-configurable.
 
 Notifications are not required for the initial functional MVP and may be implemented after the core financial engine is stable.
 
+**Status: MVP+.** The notification specification shall define when permission is requested, the default on/off state, and whether amounts may appear in notification text (including on the lock screen).
+
 ---
 
 # 27. FR-022 — Data Export
@@ -697,6 +867,12 @@ Exported data should contain enough information to reconstruct the user's transa
 
 Backup/restore requirements will be formally specified before implementation.
 
+**FR-022.1 (MVP)** The user shall be able to export all transactions, budgets, savings goals and profile settings to a single JSON file containing a format version identifier. The export shall work offline.
+
+**FR-022.2** Before exporting, the application shall warn that the exported file is not encrypted and contains the user's financial information.
+
+**FR-022.3** CSV export is MVP+.
+
 ---
 
 # 28. FR-023 — Data Restore
@@ -711,6 +887,8 @@ Restore behavior must:
 * Preserve financial data integrity.
 
 This feature requires its own specification before implementation.
+
+**Status: Deferred.** The restore specification shall require rejecting files with an unknown or newer format version, and shall define merge vs replace behavior.
 
 ---
 
@@ -747,6 +925,26 @@ The application should provide settings for:
 
 The exact settings menu will be defined during DESIGN.
 
+**FR-025.1 (MVP)** Settings shall contain: primary currency (subject to FR-001.4), theme (system / light / dark), data export (FR-022.1), delete all data (FR-026.2), about, and privacy information (NFR-004.2). Notifications and app lock are MVP+. Data restore is deferred.
+
+---
+
+# 30.1 FR-026 — Data Lifecycle
+
+1. Deleting a transaction, budget or savings goal shall require confirmation that names the item being deleted.
+2. The user shall be able to delete all application data from Settings, after a confirmation that states the deletion is permanent and cannot be undone. Afterwards the application shall contain no transactions, budgets, goals or profile data.
+3. A save shall be all-or-nothing: either the whole record is stored, or nothing is stored and the user is told.
+4. A single save action (including a repeated tap) shall create at most one record.
+5. Application updates shall preserve all existing financial records and their values.
+
+---
+
+# 30.2 FR-027 — Error Handling
+
+1. If a save fails, the application shall tell the user that the data was **not** saved and shall keep their entered values so they can retry.
+2. If the local database cannot be opened or upgraded, the application shall show an error screen explaining that financial data is unavailable. It shall not show empty totals that could be mistaken for zero values, and it shall not delete or recreate the database automatically.
+3. Error messages shown to users and written to logs shall not contain transaction amounts, notes or other financial details.
+
 ---
 
 # 31. Non-Functional Requirements
@@ -758,6 +956,15 @@ Normal transaction operations should feel immediate to the user.
 Large historical datasets should not cause unnecessary UI blocking.
 
 Financial calculations should be efficient enough for mobile execution.
+
+**NFR-001.1** The application shall remain usable with up to 50,000 stored transactions.
+
+**NFR-001.2** On a mid-range Android device with 50,000 transactions stored:
+
+* A saved transaction is visible in the transaction list within 300 ms of the save action.
+* The dashboard is fully displayed within 1 second of opening.
+
+The reference device is chosen in DESIGN.
 
 ---
 
@@ -785,6 +992,10 @@ Money calculations must avoid floating-point precision errors.
 
 Core financial information must remain local unless explicitly exported or synchronized by a future user-authorized feature.
 
+**NFR-004.1** The application shall exclude its financial database from automatic operating-system cloud backups (e.g. Android Auto Backup, iCloud backup) by default, so that financial data does not leave the device without an explicit user action.
+
+**NFR-004.2** The application's privacy information shall state where data is stored, that it is not backed up automatically, that uninstalling the application deletes it, and that the user can protect against loss by exporting it (FR-022.1).
+
 ---
 
 ## NFR-005 — Cross-Platform Compatibility
@@ -808,7 +1019,13 @@ The application should support:
 * Sufficient contrast
 * Clear error messages
 
-Exact accessibility standards will be defined during DESIGN.
+**NFR-006.1** The application shall follow WCAG 2.2 Level AA principles as they apply to mobile apps, including:
+
+* Minimum touch target of 48×48 dp.
+* Every interactive element has a screen-reader label.
+* Text contrast ratio of at least 4.5:1 (3:1 for large text).
+* Text remains usable at the device's largest standard font size.
+* Error messages identify the field and the problem in text, not by color alone.
 
 ---
 
@@ -857,6 +1074,10 @@ The system must not silently mix currencies.
 
 Currency conversion is OUT OF SCOPE for MVP.
 
+Supported currencies and currency-change rules are defined in FR-001.1 – FR-001.4.
+
+**§33.1 Language and display.** The MVP user interface is English only. INR amounts are displayed with the ₹ symbol, Indian digit grouping and two decimals (e.g. ₹1,00,000.00). Negative amounts are displayed with a leading minus sign.
+
 ---
 
 # 34. Monetary Precision Requirements
@@ -864,6 +1085,10 @@ Currency conversion is OUT OF SCOPE for MVP.
 The domain model must represent monetary values in an exact manner suitable for financial calculations.
 
 The application must not rely on JavaScript floating-point arithmetic for financial storage or calculations where precision could be lost.
+
+**§34.1** Monetary amounts shall be stored and calculated as whole numbers of the currency's smallest unit (e.g. paise for INR). An input with more decimal places than the currency allows shall be rejected, not rounded.
+
+**§34.2** Limits on individual amounts are defined in FR-003A. Calculations shall either produce exact results or fail explicitly; they shall never silently lose precision.
 
 ---
 
@@ -909,6 +1134,11 @@ The following are NOT part of the MVP:
 * Tax filing
 * Currency conversion
 * International remittance
+* Multiple currencies within one installation
+* Refunds, reversals and transfers between the user's own accounts
+* Custom budget periods (budgets are calendar-month only)
+* Future-dated transactions
+* Dismissing or snoozing recommendations
 
 These may be considered in later product versions.
 
@@ -986,7 +1216,7 @@ so that I can identify expensive areas.
 
 * Category totals are shown.
 * A date period can be selected.
-* Category spending can be compared.
+* Category totals for the selected period are listed in descending order of amount, and their sum equals total expenses for the period.
 * Total spending matches transaction data.
 
 ---
@@ -1022,7 +1252,7 @@ so that I know when I am approaching or exceeding my limit.
 * I can create a budget.
 * Spending is compared against the budget.
 * Remaining amount is displayed.
-* Budget status updates automatically.
+* Budget status reflects a saved transaction as soon as the user returns to any screen showing that budget.
 
 ---
 
@@ -1061,7 +1291,7 @@ User
  │
  ├── Savings Goals
  │
- ├── Recurring Transactions
+ ├── Recurring Transactions (MVP+)
  │
  └── Recommendations
 ```

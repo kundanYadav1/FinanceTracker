@@ -1,145 +1,164 @@
-import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, View } from 'react-native';
 
-import { Button } from '@/components/ui/button';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
-import { formatMoney } from '@/utils/money';
-import { computeBudgetStatus } from '@/db/budgets';
-import type { Budget } from '@/db/budgets';
+import {
+  Amount,
+  BottomSheet,
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  Field,
+  KText,
+  ProgressBar,
+  Screen,
+  SectionHeading,
+} from '@/components/kosh/kosh';
+import { Space } from '@/constants/theme';
+import { buildBudgetView, monthLabel, monthlyLimit, money, toDateKey } from '@/domain/overview';
 import { useAppStore } from '@/store/appStore';
+import { formatRupees, toCents } from '@/utils/money';
+
+function monthBounds(now: Date): { start: string; end: string } {
+  return {
+    start: toDateKey(new Date(now.getFullYear(), now.getMonth(), 1)),
+    end: toDateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+  };
+}
 
 export default function BudgetsScreen() {
-  const theme = useTheme();
-  const { budgets, categories, transactions, reloadBudgets, addBudget, removeBudget } = useAppStore();
+  const { budgets, categories, transactions, addBudget, removeBudget, hideAmounts } = useAppStore();
+  const now = new Date();
+  const bounds = monthBounds(now);
 
+  const [showForm, setShowForm] = useState(false);
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
-  const [periodStart, setPeriodStart] = useState(new Date().toISOString().slice(0, 10));
-  const [periodEnd, setPeriodEnd] = useState(new Date().toISOString().slice(0, 10));
-  const [showForm, setShowForm] = useState(false);
+  const [periodStart, setPeriodStart] = useState(bounds.start);
+  const [periodEnd, setPeriodEnd] = useState(bounds.end);
+  const [error, setError] = useState<string | null>(null);
 
-  const inputStyle = {
-    backgroundColor: theme.background,
-    color: theme.text,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.three,
-    borderWidth: 1,
-    borderColor: theme.backgroundElement,
-    minHeight: 44,
-  } as const;
+  const expenseCategories = categories.filter((c) => c.type === 'expense');
+  const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? id;
+  const views = budgets.map((b) => buildBudgetView(b, transactions));
+  const total = monthlyLimit(budgets, transactions, toDateKey(now));
+  const mask = (text: string) => (hideAmounts ? undefined : text);
 
-  const handleSave = async () => {
-    const cents = Math.round(parseFloat(amount || '0') * 100);
-    await addBudget({ categoryId, amount: { currency: 'INR', cents }, periodStart, periodEnd });
-    await reloadBudgets();
-    setShowForm(false);
-    setCategoryId('');
+  const openForm = () => {
+    setCategoryId(expenseCategories[0]?.id ?? '');
     setAmount('');
+    setPeriodStart(bounds.start);
+    setPeriodEnd(bounds.end);
+    setError(null);
+    setShowForm(true);
   };
 
+  const handleSave = async () => {
+    let cents: number;
+    try {
+      cents = toCents(amount.replace(/,/g, ''));
+    } catch {
+      setError('Enter an amount with up to two decimals, for example 15000.');
+      return;
+    }
+    if (cents <= 0) return setError('Budget must be more than zero.');
+    if (!categoryId) return setError('Pick a category.');
+    const dateOk = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateOk.test(periodStart) || !dateOk.test(periodEnd) || periodEnd < periodStart) {
+      return setError('Enter the period as YYYY-MM-DD, with the end on or after the start.');
+    }
+    await addBudget({ categoryId, amount: { currency: 'INR', cents }, periodStart, periodEnd });
+    setShowForm(false);
+  };
+
+  const confirmDelete = (id: string, name: string) =>
+    Alert.alert('Delete budget?', `The ${name} budget will be removed.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => removeBudget(id) },
+    ]);
+
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <ThemedText type="title" style={styles.title}>Budgets</ThemedText>
+    <>
+      <Screen>
+        <View>
+          <KText variant="title" accessibilityRole="header">
+            Budgets
+          </KText>
+          <KText variant="caption">{monthLabel(now)}</KText>
+        </View>
 
-        {showForm && (
-          <ThemedView type="backgroundElement" style={styles.formCard}>
-            <ThemedText type="smallBold" style={styles.sectionTitle}>Set a Budget</ThemedText>
-            <View style={styles.row}>
-              <TextInput style={inputStyle} value={categoryId} onChangeText={setCategoryId} placeholder="Category id (e.g. cat_food)" />
-              <TextInput style={inputStyle} value={amount} onChangeText={setAmount} placeholder="Amount" keyboardType="numeric" />
-            </View>
-            <View style={styles.row}>
-              <TextInput style={inputStyle} value={periodStart} onChangeText={setPeriodStart} placeholder="Start date (YYYY-MM-DD)" />
-              <TextInput style={inputStyle} value={periodEnd} onChangeText={setPeriodEnd} placeholder="End date (YYYY-MM-DD)" />
-            </View>
-            <Button label="Create Budget" onPress={handleSave} type="default" />
-            <Button label="Cancel" onPress={() => setShowForm(false)} type="default" />
-          </ThemedView>
-        )}
+        {total ? (
+          <Card style={{ gap: Space.s3 }}>
+            <KText variant="overline">Spent of monthly limit</KText>
+            <Amount money={money(total.spentCents)} size="lg" masked={hideAmounts} />
+            <ProgressBar
+              label={hideAmounts ? 'Monthly limit' : `${formatRupees(money(total.limitCents))} limit`}
+              value={total.percent}
+              detail={mask(
+                total.limitCents >= total.spentCents
+                  ? `${formatRupees(money(total.limitCents - total.spentCents))} left`
+                  : `${formatRupees(money(total.spentCents - total.limitCents))} over`,
+              )}
+            />
+          </Card>
+        ) : null}
 
-        <Button label="Add Budget" onPress={() => setShowForm(true)} type="default" />
+        <View style={{ gap: Space.s3 }}>
+          <SectionHeading>By category</SectionHeading>
+          {views.length === 0 ? (
+            <EmptyState
+              message="No budgets yet. Set one to see how much you can still spend."
+              action="Set a budget"
+              onAction={openForm}
+            />
+          ) : (
+            views.map((v) => (
+              <Card key={v.budget.id} style={{ gap: Space.s3 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: Space.s3 }}>
+                  <KText variant="bodyStrong">{catName(v.budget.categoryId)}</KText>
+                  <KText variant="caption" style={{ fontVariant: ['tabular-nums'] }}>
+                    {hideAmounts
+                      ? 'Rs •••• of Rs ••••'
+                      : `${formatRupees(money(v.spentCents))} of ${formatRupees(v.budget.amount)}`}
+                  </KText>
+                </View>
+                <ProgressBar label="Used" value={v.percent} detail={mask(v.detail)} />
+                <Button variant="ghost" onPress={() => confirmDelete(v.budget.id, catName(v.budget.categoryId))}>
+                  Delete budget
+                </Button>
+              </Card>
+            ))
+          )}
+        </View>
 
-        <ThemedText type="smallBold" style={styles.listTitle}>
-          {budgets.length} budget{budgets.length === 1 ? '' : 's'}
-        </ThemedText>
+        {views.length > 0 ? (
+          <Button block onPress={openForm}>
+            Set a budget
+          </Button>
+        ) : null}
+      </Screen>
 
-        {budgets.length === 0 ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
-            No budgets yet. Create your first budget.
-          </ThemedText>
-        ) : (
-          <View style={styles.list}>
-            {budgets.map((budget) => {
-              const category = categories.find((c) => c.id === budget.categoryId);
-              const spentCents = transactions
-                .filter((t) => t.type === 'expense' && t.categoryId === budget.categoryId)
-                .filter((t) => t.date >= budget.periodStart && t.date <= budget.periodEnd)
-                .reduce((sum, t) => sum + t.amount.cents, 0);
-              const status = computeBudgetStatus({ ...budget, amount: budget.amount }, spentCents);
-              return (
-                <BudgetRow key={budget.id} budget={budget} categoryName={category?.name ?? budget.categoryId} status={status} onDelete={() => removeBudget(budget.id)} />
-              );
-            })}
+      <BottomSheet visible={showForm} title="Set a budget" onClose={() => setShowForm(false)}>
+        <View style={{ gap: Space.s2 }}>
+          <KText variant="overline">Category</KText>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Space.s2 }}>
+            {expenseCategories.map((c) => (
+              <Chip key={c.id} label={c.name} selected={c.id === categoryId} onPress={() => setCategoryId(c.id)} />
+            ))}
           </View>
-        )}
-      </ScrollView>
-    </ThemedView>
+        </View>
+        <Field label="Limit (Rs)" value={amount} onChangeText={setAmount} placeholder="15000" keyboardType="decimal-pad" />
+        <Field label="Starts" value={periodStart} onChangeText={setPeriodStart} placeholder="YYYY-MM-DD" />
+        <Field label="Ends" value={periodEnd} onChangeText={setPeriodEnd} placeholder="YYYY-MM-DD" />
+        {error ? (
+          <KText variant="bodyStrong" color="negative" accessibilityLiveRegion="polite">
+            {error}
+          </KText>
+        ) : null}
+        <Button block onPress={handleSave}>
+          Save budget
+        </Button>
+      </BottomSheet>
+    </>
   );
 }
-
-function BudgetRow({ budget, categoryName, status, onDelete }: { budget: Budget; categoryName: string; status: ReturnType<typeof computeBudgetStatus>; onDelete: () => void }) {
-  const statusColor = status.status === 'Exceeded' ? '#e57373' : status.status === 'Warning' ? '#ffb74d' : '#4db6ac';
-  const utilization = budget.amount.cents > 0 ? Math.round((status.spentCents / budget.amount.cents) * 100) : 0;
-  return (
-      <ThemedView type="backgroundElement" style={styles.budgetRow}>
-      <ThemedView style={styles.rowContent}>
-        <ThemedText type="default">{categoryName}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">{budget.periodStart} → {budget.periodEnd}</ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.rowActions}>
-        <ThemedText type="default" style={{ fontWeight: '600' }}>
-          {formatMoney(budget.amount)}
-        </ThemedText>
-        <ThemedText type="small" style={{ color: statusColor, fontWeight: '600' }}>
-          {status.status} ({utilization}%)
-        </ThemedText>
-        <PressableDelete onPress={onDelete} />
-      </ThemedView>
-    </ThemedView>
-  );
-}
-
-function PressableDelete({ onPress }: { onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={{ paddingHorizontal: Spacing.three, paddingVertical: Spacing.two }}>
-      <ThemedText type="small" style={{ color: '#e57373', fontWeight: '600' }}>Delete</ThemedText>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContent: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.six },
-  title: { fontSize: 32, fontWeight: 600, lineHeight: 44 },
-  formCard: { marginBottom: Spacing.four, padding: Spacing.four, borderRadius: Spacing.three },
-  sectionTitle: { fontSize: 14, fontWeight: 700, marginBottom: Spacing.three },
-  row: { flexDirection: 'row', gap: Spacing.three, marginBottom: Spacing.three, flexWrap: 'wrap' },
-  listTitle: { fontSize: 14, fontWeight: 700, marginBottom: Spacing.three },
-  empty: { paddingVertical: Spacing.four, textAlign: 'center' },
-  list: { gap: Spacing.two },
-  budgetRow: {
-    flexDirection: 'row',
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
-    borderLeftWidth: 4,
-    marginBottom: Spacing.two,
-  },
-  rowContent: { flex: 1, gap: Spacing.half },
-  rowActions: { gap: Spacing.two, alignItems: 'center' },
-});
