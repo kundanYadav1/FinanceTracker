@@ -1,19 +1,15 @@
 import { create } from 'zustand';
 import { getDatabase } from '@/db/database';
 import type { Category, PaymentMethod } from '@/db/seed';
-import type {
-  Budget,
-  BudgetInput,
-  BudgetWithSpending,
-} from '@/db/budgets';
 import * as BudgetDB from '@/db/budgets';
+import type { BudgetScope, BudgetVersion } from '@/domain/budget';
+import { DEFAULT_CURRENCY, monthKey } from '@/domain/overview';
 import type { SavingsGoal, SavingsGoalInput, SavingsGoalWithProgress } from '@/db/goals';
 import * as GoalDB from '@/db/goals';
 import type { Transaction, TransactionInput, TransactionFilters } from '@/db/transactions';
 import * as TransactionDB from '@/db/transactions';
 import * as SeedDB from '@/db/seed';
 import type { Money } from '@/utils/money';
-import { computeBudgetStatus } from '@/db/budgets';
 import { computeGoalProgress } from '@/db/goals';
 
 export type Profile = {
@@ -27,7 +23,7 @@ type AppState = {
   categories: Category[];
   paymentMethods: PaymentMethod[];
   transactions: Transaction[];
-  budgets: Budget[];
+  budgetVersions: BudgetVersion[];
   goals: SavingsGoal[];
   isLoaded: boolean;
   /** Session-only privacy mask for amounts. */
@@ -42,9 +38,10 @@ type AppState = {
   addTransaction: (input: TransactionInput) => Promise<Transaction>;
   updateTransaction: (id: string, input: Partial<TransactionInput>) => Promise<void>;
   removeTransaction: (id: string) => Promise<void>;
-  addBudget: (input: BudgetInput) => Promise<Budget>;
-  updateBudget: (id: string, input: Partial<BudgetInput>) => Promise<void>;
-  removeBudget: (id: string) => Promise<void>;
+  /** Create or change a budget from the current month onward. */
+  setBudget: (scope: BudgetScope, categoryId: string | null, amountCents: number) => Promise<void>;
+  /** Remove a budget from the current month onward; earlier months keep their amount. */
+  removeBudget: (scope: BudgetScope, categoryId: string | null) => Promise<void>;
   addGoal: (input: SavingsGoalInput) => Promise<SavingsGoal>;
   updateGoal: (id: string, input: Partial<SavingsGoalInput>) => Promise<void>;
   removeGoal: (id: string) => Promise<void>;
@@ -54,7 +51,6 @@ type AppState = {
     startDate?: string,
     endDate?: string
   ) => { categoryId: string; categoryName: string; amount: Money }[];
-  getBudgetStatus: (budget: Budget) => BudgetWithSpending;
   getGoalProgress: (goal: SavingsGoal) => SavingsGoalWithProgress;
 };
 
@@ -63,7 +59,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   categories: [],
   paymentMethods: [],
   transactions: [],
-  budgets: [],
+  budgetVersions: [],
   goals: [],
   isLoaded: false,
   hideAmounts: false,
@@ -71,14 +67,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   load: async () => {
     await SeedDB.seedDefaultData();
-    const [categories, paymentMethods, transactions, budgets, goals] = await Promise.all([
+    const [categories, paymentMethods, transactions, budgetVersions, goals] = await Promise.all([
       SeedDB.getCategories(),
       SeedDB.getPaymentMethods(),
       TransactionDB.listTransactions(),
-      BudgetDB.getBudgets(),
+      BudgetDB.getBudgetVersions(),
       GoalDB.getGoals(),
     ]);
-    set({ categories, paymentMethods, transactions, budgets, goals, isLoaded: true });
+    set({ categories, paymentMethods, transactions, budgetVersions, goals, isLoaded: true });
   },
 
   reloadTransactions: async (filters) => {
@@ -87,8 +83,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   reloadBudgets: async () => {
-    const budgets = await BudgetDB.getBudgets();
-    set({ budgets });
+    const budgetVersions = await BudgetDB.getBudgetVersions();
+    set({ budgetVersions });
   },
 
   reloadGoals: async () => {
@@ -131,24 +127,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({ transactions: state.transactions.filter((t) => t.id !== id) }));
   },
 
-  addBudget: async (input) => {
-    const budget = await BudgetDB.createBudget(input);
-    set((state) => ({ budgets: [...state.budgets, budget] }));
-    return budget;
+  setBudget: async (scope, categoryId, amountCents) => {
+    await BudgetDB.setBudgetVersion({
+      scope,
+      categoryId,
+      month: monthKey(new Date()),
+      amountCents,
+      currency: get().profile?.currency ?? DEFAULT_CURRENCY,
+    });
+    await get().reloadBudgets();
   },
 
-  updateBudget: async (id, input) => {
-    const budget = await BudgetDB.updateBudget(id, input);
-    if (!budget) return;
-    set((state) => ({
-      budgets: state.budgets.map((b) => (b.id === id ? budget : b)),
-    }));
-  },
-
-  removeBudget: async (id) => {
-    const ok = await BudgetDB.deleteBudget(id);
-    if (!ok) return;
-    set((state) => ({ budgets: state.budgets.filter((b) => b.id !== id) }));
+  removeBudget: async (scope, categoryId) => {
+    await BudgetDB.removeBudgetVersion(
+      scope,
+      categoryId,
+      monthKey(new Date()),
+      get().profile?.currency ?? DEFAULT_CURRENCY,
+    );
+    await get().reloadBudgets();
   },
 
   addGoal: async (input) => {
@@ -199,10 +196,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       categoryName: value.name,
       amount: { currency: 'INR', cents: value.cents },
     }));
-  },
-
-  getBudgetStatus: (budget) => {
-    return computeBudgetStatus(budget, 0);
   },
 
   getGoalProgress: (goal) => {

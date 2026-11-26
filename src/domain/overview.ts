@@ -1,9 +1,9 @@
-import type { Budget } from '@/db/budgets';
+import { BUDGET_WARNING_PERCENT } from '@/domain/budget';
 import type { SavingsGoal } from '@/db/goals';
 import { computeGoalProgress } from '@/db/goals';
 import type { Category } from '@/db/seed';
 import type { Transaction } from '@/db/transactions';
-import { formatRupees, type Money } from '@/utils/money';
+import type { Money } from '@/utils/money';
 
 export const DEFAULT_CURRENCY = 'INR';
 
@@ -76,51 +76,9 @@ export function groupByDate(transactions: Transaction[], now: Date): DateGroup[]
     }));
 }
 
-export type BudgetView = {
-  budget: Budget;
-  spentCents: number;
-  percent: number;
-  state: 'ok' | 'warn' | 'over';
-  detail: string;
-};
-
-export function budgetSpent(budget: Budget, transactions: Transaction[]): number {
-  return transactions
-    .filter((t) => t.type === 'expense' && t.categoryId === budget.categoryId)
-    .filter((t) => t.date.slice(0, 10) >= budget.periodStart && t.date.slice(0, 10) <= budget.periodEnd)
-    .reduce((sum, t) => sum + t.amount.cents, 0);
-}
-
+/** Progress-bar state for a percent of budget used (80% warns, strictly above 100% is over). */
 export function budgetState(percent: number): 'ok' | 'warn' | 'over' {
-  return percent > 100 ? 'over' : percent >= 80 ? 'warn' : 'ok';
-}
-
-export function buildBudgetView(budget: Budget, transactions: Transaction[]): BudgetView {
-  const spentCents = budgetSpent(budget, transactions);
-  const limit = budget.amount.cents;
-  const percent = limit > 0 ? (spentCents / limit) * 100 : 0;
-  const currency = budget.amount.currency;
-  const diff = limit - spentCents;
-  const detail =
-    diff >= 0
-      ? `${formatRupees({ currency, cents: diff })} left`
-      : `${formatRupees({ currency, cents: -diff })} over`;
-  return { budget, spentCents, percent, state: budgetState(percent), detail };
-}
-
-/** Budgets whose period contains `today`. */
-export function activeBudgets(budgets: Budget[], today: string): Budget[] {
-  return budgets.filter((b) => b.periodStart <= today && today <= b.periodEnd);
-}
-
-export type MonthlyLimit = { limitCents: number; spentCents: number; percent: number };
-
-export function monthlyLimit(budgets: Budget[], transactions: Transaction[], today: string): MonthlyLimit | null {
-  const active = activeBudgets(budgets, today);
-  if (active.length === 0) return null;
-  const limitCents = active.reduce((s, b) => s + b.amount.cents, 0);
-  const spentCents = active.reduce((s, b) => s + budgetSpent(b, transactions), 0);
-  return { limitCents, spentCents, percent: limitCents > 0 ? (spentCents / limitCents) * 100 : 0 };
+  return percent > 100 ? 'over' : percent >= BUDGET_WARNING_PERCENT ? 'warn' : 'ok';
 }
 
 export type Insight = {
