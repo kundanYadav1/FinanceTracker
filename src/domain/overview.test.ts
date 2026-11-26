@@ -1,13 +1,10 @@
-import type { Budget } from '@/db/budgets';
 import type { Transaction } from '@/db/transactions';
 
 import {
   budgetState,
-  buildBudgetView,
   dateGroupLabel,
   findInsight,
   groupByDate,
-  monthlyLimit,
   sumMonth,
 } from './overview';
 
@@ -28,48 +25,12 @@ function tx(p: Partial<Transaction> & { date: string; cents: number }): Transact
   };
 }
 
-const budget: Budget = {
-  id: 'b1',
-  categoryId: 'cat_food',
-  amount: { currency: 'INR', cents: 1500000 },
-  periodStart: '2026-11-01',
-  periodEnd: '2026-11-30',
-  createdAt: '',
-  updatedAt: '',
-};
-
 describe('budget state', () => {
   it('uses the 80% and 100% thresholds', () => {
     expect(budgetState(79.9)).toBe('ok');
     expect(budgetState(80)).toBe('warn');
     expect(budgetState(100)).toBe('warn');
     expect(budgetState(100.1)).toBe('over');
-  });
-
-  it('reports amount over or left in words', () => {
-    const over = buildBudgetView(budget, [tx({ date: '2026-11-03', cents: 1845000 })]);
-    expect(over.state).toBe('over');
-    expect(over.detail).toBe('Rs 3,450 over');
-    const ok = buildBudgetView(budget, [tx({ date: '2026-11-03', cents: 300000 })]);
-    expect(ok.detail).toBe('Rs 12,000 left');
-  });
-
-  it('ignores spending outside the period or in other categories', () => {
-    const v = buildBudgetView(budget, [
-      tx({ date: '2026-10-31', cents: 500000 }),
-      tx({ date: '2026-11-05', cents: 500000, categoryId: 'cat_rent' }),
-    ]);
-    expect(v.spentCents).toBe(0);
-  });
-});
-
-describe('monthly limit', () => {
-  it('is null without an active budget', () => {
-    expect(monthlyLimit([budget], [], '2026-12-02')).toBeNull();
-  });
-  it('sums limit and spending of active budgets', () => {
-    const m = monthlyLimit([budget], [tx({ date: '2026-11-03', cents: 750000 })], '2026-11-25');
-    expect(m).toEqual({ limitCents: 1500000, spentCents: 750000, percent: 50 });
   });
 });
 

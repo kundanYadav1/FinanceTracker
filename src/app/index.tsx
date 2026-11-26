@@ -18,13 +18,13 @@ import {
   TransactionRow,
 } from '@/components/kosh/kosh';
 import { Space } from '@/constants/theme';
+import { budgetWarnings, buildBudgetLines, monthlyBudgetSummary } from '@/domain/budget';
 import {
   daysLeftInMonth,
   findInsight,
   groupByDate,
   monthKey,
   monthLabel,
-  monthlyLimit,
   money,
   sumMonth,
   toDateKey,
@@ -41,7 +41,7 @@ function greeting(hour: number): string {
 export default function DashboardScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const { transactions, categories, budgets, goals, paymentMethods, hideAmounts, toggleHideAmounts } =
+  const { transactions, categories, budgetVersions, goals, paymentMethods, hideAmounts, toggleHideAmounts } =
     useAppStore();
   const { openNew, openEdit, sheet } = useTransactionEditor();
 
@@ -51,7 +51,13 @@ export default function DashboardScreen() {
   const income = sumMonth(transactions, 'income', month);
   const expenses = sumMonth(transactions, 'expense', month);
   const saved = income - expenses;
-  const limit = monthlyLimit(budgets, transactions, today);
+  const budgetLines = buildBudgetLines(budgetVersions, transactions, month);
+  const limit = monthlyBudgetSummary(budgetLines);
+  const budgetAlerts = budgetWarnings(
+    budgetLines,
+    (l) => (l.scope === 'overall' ? 'monthly budget' : `${categories.find((c) => c.id === l.categoryId)?.name ?? l.categoryId} budget`),
+    (c, cur) => (hideAmounts ? 'Rs ••••' : formatRupees({ currency: cur, cents: c })),
+  );
   const insight = findInsight(transactions, categories, now);
   const todayRows = groupByDate(transactions, now).find((g) => g.dateKey === today)?.rows ?? [];
   const featuredGoal = goals.find((g) => g.currentAmount.cents < g.targetAmount.cents) ?? goals[0];
@@ -59,7 +65,7 @@ export default function DashboardScreen() {
   const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? id;
   const pmName = (id?: string) => paymentMethods.find((p) => p.id === id)?.name;
 
-  const heroCents = limit ? limit.limitCents - limit.spentCents : saved;
+  const heroCents = limit ? Math.max(limit.limitCents - limit.spentCents, 0) : saved;
 
   return (
     <>
@@ -105,6 +111,20 @@ export default function DashboardScreen() {
             <KText variant="caption">Set a budget to see how much you can still spend.</KText>
           )}
         </Card>
+
+        {budgetAlerts.length > 0 ? (
+          <Card tint style={{ gap: Space.s2 }}>
+            <KText variant="overline">Spending alert</KText>
+            {budgetAlerts.map((w) => (
+              <KText key={w} variant="bodyStrong">
+                {w}
+              </KText>
+            ))}
+            <Button variant="ghost" onPress={() => router.push('/budgets')}>
+              See budgets
+            </Button>
+          </Card>
+        ) : null}
 
         <View style={styles.pair}>
           <Button block onPress={() => openNew('expense')} style={{ flex: 1 }}>

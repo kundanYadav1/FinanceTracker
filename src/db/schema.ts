@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const MIGRATIONS = [
   {
@@ -84,6 +84,43 @@ export const MIGRATIONS = [
       );
 
       INSERT OR IGNORE INTO schema_migrations (version) VALUES (2);
+    `,
+  },
+  {
+    version: 3,
+    up: `
+      -- Month-effective budget versions (ADR-0006). A row applies from its month onward until a later
+      -- row for the same scope. amount_cents NULL means "no budget from this month".
+      CREATE TABLE IF NOT EXISTS budget_versions (
+        id TEXT PRIMARY KEY,
+        scope TEXT NOT NULL CHECK (scope IN ('overall', 'category')),
+        category_id TEXT,
+        scope_key TEXT NOT NULL,
+        effective_from_month TEXT NOT NULL
+          CHECK (effective_from_month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),
+        amount_cents INTEGER CHECK (amount_cents IS NULL OR (amount_cents >= 0 AND amount_cents <= 9999999999)),
+        currency TEXT NOT NULL DEFAULT 'INR',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        CHECK ((scope = 'overall' AND category_id IS NULL AND scope_key = 'overall')
+            OR (scope = 'category' AND category_id IS NOT NULL AND scope_key = category_id)),
+        FOREIGN KEY (category_id) REFERENCES categories(id),
+        UNIQUE (scope_key, effective_from_month)
+      );
+
+      CREATE INDEX IF NOT EXISTS ix_budget_category ON budget_versions(category_id);
+
+      -- Carry over budgets from the draft table; the latest edit wins when two start in the same month.
+      INSERT OR IGNORE INTO budget_versions
+        (id, scope, category_id, scope_key, effective_from_month, amount_cents, currency, created_at, updated_at)
+      SELECT id, 'category', category_id, category_id, substr(period_start, 1, 7), amount_cents, currency,
+             created_at, updated_at
+      FROM budgets
+      WHERE amount_cents >= 0 AND amount_cents <= 9999999999
+        AND substr(period_start, 1, 7) GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'
+      ORDER BY updated_at DESC;
+
+      INSERT OR IGNORE INTO schema_migrations (version) VALUES (3);
     `,
   },
 ];
